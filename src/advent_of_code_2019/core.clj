@@ -1,5 +1,7 @@
 (ns advent-of-code-2019.core)
 
+;;; Day 1
+
 (def module-masses
   "The masses of all the modules that need to be launched."
   [113481
@@ -173,6 +175,10 @@
    99,
    2,0,14,0])
 
+
+
+;;; Day 2
+
 (defn intcode
   "Run the intcode interpreter on the input data."
   ([]
@@ -193,6 +199,8 @@
          99 memory
          (println "Unknown opcode:" opcode))))))
 
+;; Part 2
+
 (defn brutecode
   "Hunt for input values that yield 19690720 in position 0"
   []
@@ -205,6 +213,10 @@
       (when (= output 19690720)
         (println "Match! noun:" noun "verb:" verb "answer:" (+ (* 100 noun) verb)))))
   nil)
+
+
+
+;;; Day 3
 
 (defn extract-segment
   "Pulls off and decomposes the first wire routing."
@@ -270,8 +282,17 @@
   [wire-1 wire-2]
   (apply min (filter pos? (map manhattan-distance (find-intersections wire-1 wire-2)))))
 
+;; Part 2
+
 (defn gather-segments-with-steps
-  "Collects horizontal and vertical line segments given wire routing."
+  "Collects horizontal and vertical line segments given wire routing.
+  Returns a pair of vectors of segment vectors, much like
+  `gather-segments`, but each segment has two additional elements: the
+  total step count taken to reach the start of the segment, and a
+  function which takes a position along the segment (an x value for
+  horizontal segments, and a y value for vertical segments) and
+  returns how many additional steps are required to reach that
+  location."
   [routing]
   (loop [x          0
          y          0
@@ -301,6 +322,10 @@
       [horizontal vertical])))
 
 (defn find-segment-intersections-with-steps
+  "Finds points where wire segments intersect, given horizontal segments
+  of one and vertical segments of the other. The value returned is the
+  x and y coordinates of the intersections, and the number of steps it
+  took to get there along each segment's wire."
   [h-segments v-segments]
   (filter identity
           (for [[h-y [h-x1 h-x2] h-step-fn] h-segments
@@ -310,6 +335,9 @@
               [v-x h-y (h-step-fn v-x) (v-step-fn h-y)]))))
 
 (defn find-intersections-with-steps
+  "Given a pair of wire specifications, return a list of points where
+  their segments intersect each other, along with the number of steps
+  along each wire were required to reach that point."
   [wire-1 wire-2]
   (let [segments-1 (gather-segments-with-steps wire-1)
         segments-2 (gather-segments-with-steps wire-2)]
@@ -317,12 +345,19 @@
             (find-segment-intersections-with-steps (first segments-2) (second segments-1)))))
 
 (defn closest-intersection-with-steps
+  "Solves the second version of the problem by finding the intersection
+  between two wire specifications that requires the fewest total steps
+  along the wires to reach."
   [wire-1 wire-2]
   (apply min (filter pos? (map (fn [[x y steps-1 steps-2]] (+ steps-1 steps-2))
                                (find-intersections-with-steps wire-1 wire-2)))))
 
+
+;;; Day 4
+
 (defn valid?
-  "Checks whether a sequence of digits meets the password rules."
+  "Checks whether a sequence of digits meets the password rules for day
+  4."
   [password]
   (let [digits (map #(Integer/valueOf (str %)) (str password))]
     (and (some #(apply = %) (partition 2 1 digits))
@@ -331,7 +366,8 @@
 ;; Example use: (count (filter valid? (range 271973 785962)))
 
 (defn valid-2?
-  "Checks whether a sequence of digits meets the part 2 password rules."
+  "Checks whether a sequence of digits meets the part 2 password rules
+  for day 4."
   [password]
   (let [digits (map #(Integer/valueOf (str %)) (str password))]
     (and (some #(= 2 %) (vals (frequencies digits)))
