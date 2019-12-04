@@ -6,7 +6,7 @@ My solutions to this year's programming puzzles, shared on GitHub at the request
 
 Just open a Clojure REPL on the project, and tweak and invoke the
 appropriate functions. I expect most everything will stay in the core
-package, but will hopefully remember to update this if they grow
+namespace, but will hopefully remember to update this if they grow
 enough to merit splitting into other namespaces.
 
 ## License
