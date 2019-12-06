@@ -1693,3 +1693,20 @@ I)SAN")
      (println "inward transfers:" inward-path)
      (println "outward transfers:" outward-path)
      (+ (count outward-path) (count inward-path)))))
+
+;; A better solution to part 1.
+
+(defn count-orbits-better
+    "Calculate the total direct and indirect orbits in the system without
+  using a ton of stack."
+  ([]
+   (count-orbits-better (read-orbits-2)))
+  ([orbits]
+   (loop [current (first (keys orbits))
+          total 0
+          left (rest (keys orbits))]
+     (if current
+       (recur (first left)
+              (+ total (count (path-to-com orbits current)))
+              (rest left))
+       total))))
