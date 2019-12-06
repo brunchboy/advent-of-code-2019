@@ -1609,6 +1609,9 @@ B2D)6YV
 R36)S8M")
 
 (defn read-orbits
+  "Builds a map whose keys are the names of the bodies in the system,
+  and whose values are sets of the names of the bodies that directly
+  orbit them."
   ([]
    (read-orbits day-6-orbits))
   ([orbits]
@@ -1622,12 +1625,71 @@ R36)S8M")
          map)))))
 
 (defn count-orbits
+  "Calculate the total direct and indirect orbits in the system."
   ([]
    (count-orbits (read-orbits) 0 "COM"))
   ([system base planet]
    (loop [orbiters (get system planet)
           current base]
-     (println current planet base orbiters)
+     #_(println current planet base orbiters)
      (if (seq orbiters)
        (apply + current (map (partial count-orbits system (inc current)) orbiters))
        current))))
+
+;; Part 2
+
+(def sample-orbits
+  "A simple set of orbits that can be used to test the solution"
+  "COM)B
+B)C
+C)D
+D)E
+E)F
+B)G
+G)H
+D)I
+E)J
+J)K
+K)L
+K)YOU
+I)SAN")
+
+(defn read-orbits-2
+  "Builds a map whose keys are the names of the bodies in the system and
+  whose values are the name of the body they directly orbit."
+  ([]
+   (read-orbits-2 day-6-orbits))
+  ([orbits]
+   (with-in-str orbits
+     (loop [orbit (read-line)
+            map {}]
+       (if orbit
+         (recur (read-line)
+                (let [[anchor orbiter] (clojure.string/split orbit #"\)")]
+                  (assoc map orbiter anchor)))
+         map)))))
+
+(defn path-to-com
+  "Find the chain of anchors from a body to the common center, given the
+  orbit map."
+  [orbits body]
+  (loop [current body
+         result []]
+    (if-let [anchor (orbits current)]
+      (recur anchor (conj result anchor))
+      result)))
+
+(defn transfers-to-santa
+  "Find the minimal number of orbital transfers required to enter the
+  same orbit as Santa."
+  ([]
+   (transfers-to-santa (read-orbits-2 day-6-orbits)))
+  ([orbits]
+   (let [my-path    (path-to-com orbits "YOU")
+         santa-path (path-to-com orbits "SAN")
+         santa-set  (set santa-path)
+         inward-path (vec (remove (set santa-path) my-path))
+         outward-path (vec (remove (set my-path) santa-path))]
+     (println "inward transfers:" inward-path)
+     (println "outward transfers:" outward-path)
+     (+ (count outward-path) (count inward-path)))))
