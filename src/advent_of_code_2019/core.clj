@@ -454,7 +454,9 @@
          (println "Unknown opcode:" opcode))))
    nil))
 
-(def day-5-orbits "F6J)1YB
+;;; Day 6
+
+(def day-6-orbits "F6J)1YB
 6LV)SG3
 K7G)GD2
 JC1)Y2W
