@@ -167,26 +167,26 @@
   returning the final amplifier's output."
   [settings]
   ;; Set up the channels that will feed the output of one amplifier to
-  ;; the input of the next, and tap the first amplifier's input so we
-  ;; can track the values coming out.
-  (let [channels        (mapv (fn [phase] (let [result (a/chan 5)]
-                                            (>!! result phase)
-                                            result))
-                              settings)
-        mult            (a/mult (first channels))
-        tap             (a/tap mult (a/chan 5))
-        tapped-channels (assoc channels 0 (a/tap mult (a/chan 5)))]
-    (dotimes [i (count channels)]
-      (intcode-async (nth tapped-channels i) (nth channels (mod (inc i) (count channels)))))
-    (>!! (nth channels 0) 0)  ; Send seed value to first amplifier in the chain.
-    (<!! (a/reduce (fn [_ latest] latest) nil tap))))  ; Block until the tap closes, returning the final value.
-
-;; Note: There is some kind of race condition which sometimes causes
-;; async-try-settings to never terminate. Interrupting and running
-;; again can eventually get all the way through. I may want to try
-;; switching to using pipelines to tie the channels together rather
-;; than using a single channel as input and output to different
-;; interpreters, but this worked well enough for now.
+  ;; the input of the next, and a final output channel that the main
+  ;; loop will use to track values coming out and feed them back in to
+  ;; the first amplifier.
+  (let [input-channels (mapv (fn [phase] (let [result (a/chan 5)]
+                                           (>!! result phase)
+                                           result))
+                             settings)
+        first-input    (nth input-channels 0)
+        last-output    (a/chan 5)]
+    (dotimes [i (count input-channels)]
+      (intcode-async (nth input-channels i) (nth input-channels (inc i) last-output)))
+    (>!! first-input 0)  ; Send seed value to first amplifier in the chain.
+    ;; Run the feedback loop until the last amplifier shuts down, returning its final output value.
+    (loop [result nil
+           latest (<!! last-output)]
+      (if latest
+        (do
+          (>!! first-input latest)
+          (recur latest (<!! last-output)))
+        result))))
 
 (defn async-find-optimal-settings
   "Try all phase permutations of the async amplifier configuration and
@@ -200,6 +200,6 @@
             best     (if (> signal (nth result 1))
                        [settings signal]
                        result)]
-        (println "best so far:" best)
+        #_(println "best so far:" best)
         (recur best (rest remaining)))
       result)))
