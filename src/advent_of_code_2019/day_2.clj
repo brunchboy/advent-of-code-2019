@@ -50,17 +50,16 @@
    (loop [i      0
           memory data]
      (let [opcode (nth memory i)
-           op1    (nth memory (inc i))
-           op2    (nth memory (+ i 2))
-           dest   (nth memory (+ i 3))]
+           op1    (nth memory (inc i) 0)
+           op2    (nth memory (+ i 2) 0)
+           dest   (nth memory (+ i 3) 0)]
        #_(println "i:" i "opcode:" opcode "op1:" op1 "op2" op2 "dest:" dest)
        (case opcode
          1  (recur (+ i 4)
                    (assoc memory dest (+ (nth memory op1) (nth memory op2))))
          2  (recur (+ i 4)
                    (assoc memory dest (* (nth memory op1) (nth memory op2))))
-         99 memory
-         (println "Unknown opcode:" opcode))))))
+         99 memory)))))
 
 ;; Part 2
 
