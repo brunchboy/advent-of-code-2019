@@ -1,4 +1,4 @@
-(ns advent-of-code.day-2-test
+(ns advent-of-code-2019.day-2-test
   "Unit tests for day 2."
   (:require [clojure.test :as test]
             [advent-of-code-2019.day-2 :as sut]))
