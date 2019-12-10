@@ -80,9 +80,9 @@
                                  \2 (+ rel-base value))))]
        #_(println "pc:" pc "opcode:" opcode "modes:" modes "rel-base:" rel-base #_"mem:" #_memory)
 
-       ;; Decode an address and compute appropriate new values for the
-       ;; program counter, relative addressing mode base, memory, and
-       ;; input and output lists.
+       ;; Decode an instruction and compute appropriate new values for
+       ;; the program counter, relative addressing mode base, memory,
+       ;; and input and output lists.
        (case opcode
 
          ;; Add operand 0 to operand 1, storing the result in address specified by operand 2.
@@ -163,9 +163,9 @@
                                  \2 (+ rel-base value))))]
        #_(println "pc:" pc "opcode:" opcode "modes:" modes "rel-base:" rel-base #_"mem:" #_memory)
 
-       ;; Decode an address and compute appropriate new values for the
-       ;; program counter, relative addressing mode base, memory, and
-       ;; perform I/O on the input/output channels when needed.
+       ;; Decode an instruction and compute appropriate new values for
+       ;; the program counter, relative addressing mode base, memory,
+       ;; and perform I/O on the input/output channels when needed.
        (case opcode
 
          ;; Add operand 0 to operand 1, storing the result in address specified by operand 2.
