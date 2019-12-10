@@ -101,7 +101,7 @@
                    (rest inputs) outputs)
 
          ;; Output the value specified by operand 0.
-         4  (recur (+ pc 2) rel-base  ; Print
+         4  (recur (+ pc 2) rel-base
                    memory inputs (conj outputs (resolve-operand 0)))
 
          ;; If the value of operand 0 is true (non-zero) jump to the address found in operand 1.
@@ -173,42 +173,42 @@
                    (assoc-growing memory (resolve-address 2) (+ (resolve-operand 0) (resolve-operand 1))))
 
          ;; Multiply operand 0 by operand 1, storing the result in address specified by operand 2.
-         2  (recur (+ pc 4) rel-base  ; Multiply
+         2  (recur (+ pc 4) rel-base
                    (assoc-growing memory (resolve-address 2) (* (resolve-operand 0) (resolve-operand 1))))
 
          ;; Read an input value, storing it in the address specified by operand 0.
-         3  (recur (+ pc 2) rel-base  ; Read
+         3  (recur (+ pc 2) rel-base
                    (assoc-growing memory (resolve-address 0) (let [val (<! input-chan)]
                                                                (println "input value:" val)
                                                                val)))
 
          ;; Output the value specified by operand 0.
-         4  (recur (+ pc 2) rel-base  ; Print
+         4  (recur (+ pc 2) rel-base
                    (do
                      (>! output-chan (resolve-operand 0))
                      memory))
 
          ;; If the value of operand 0 is true (non-zero) jump to the address found in operand 1.
-         5  (recur (if (zero? (resolve-operand 0))  ; Jump if true
+         5  (recur (if (zero? (resolve-operand 0))
                      (+ pc 3)
                      (resolve-operand 1))
                    rel-base
                    memory)
 
          ;; If the value of operand 0 is false (zero) jump to the address found in operand 1.
-         6  (recur (if (zero? (resolve-operand 0))  ; Jump if false
+         6  (recur (if (zero? (resolve-operand 0))
                      (resolve-operand 1)
                      (+ pc 3))
                    rel-base
                    memory)
 
          ;; Store a 1 in the address specified by operand 2 if operand 0 is less than operand 1, otherwise store a 0.
-         7  (recur (+ pc 4) rel-base  ; Less than
+         7  (recur (+ pc 4) rel-base
                    (assoc-growing memory (resolve-address 2)
                                   (if (< (resolve-operand 0) (resolve-operand 1)) 1 0)))
 
          ;; Store a 1 in the address specified by operand 2 if operand 0 equals operand 1, otherwise store a 0.
-         8  (recur (+ pc 4) rel-base  ; Equals
+         8  (recur (+ pc 4) rel-base
                    (assoc-growing  memory (resolve-address 2)
                                    (if (= (resolve-operand 0) (resolve-operand 1)) 1 0)))
 
