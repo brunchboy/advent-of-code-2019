@@ -178,9 +178,7 @@
 
          ;; Read an input value, storing it in the address specified by operand 0.
          3  (recur (+ pc 2) rel-base
-                   (assoc-growing memory (resolve-address 0) (let [val (<! input-chan)]
-                                                               (println "input value:" val)
-                                                               val)))
+                   (assoc-growing memory (resolve-address 0) (<! input-chan)))
 
          ;; Output the value specified by operand 0.
          4  (recur (+ pc 2) rel-base
