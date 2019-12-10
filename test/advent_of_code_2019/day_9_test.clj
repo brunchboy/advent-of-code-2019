@@ -18,9 +18,3 @@
 
 (test/deftest answer-2
   (test/is (= [46643] (sut/intcode [2]))))
-
-(test/deftest answer-1-async-wrapped
-  (test/is (= [2955820355] (sut/intcode-async-wrapped [1]))))
-
-(test/deftest answer-2-async-wrapped
-  (test/is (= [46643] (sut/intcode-async-wrapped [2]))))
