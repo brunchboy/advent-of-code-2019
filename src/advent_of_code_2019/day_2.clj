@@ -47,18 +47,27 @@
   ([]
    (intcode program))
   ([data]
-   (loop [i      0
-          memory data]
-     (let [opcode (nth memory i)
-           op1    (nth memory (inc i) 0)
-           op2    (nth memory (+ i 2) 0)
-           dest   (nth memory (+ i 3) 0)]
+   (loop [pc     0      ; Program counter: address of next instruction to be executed.
+          memory data]  ; The entire memory of the computer, initialized with the program contents.
+
+     ;; Decode an instruction and compute appropriate new values for
+     ;; the program counter and memory.
+     (let [opcode (nth memory pc)
+           op1    (nth memory (inc pc) 0)
+           op2    (nth memory (+ pc 2) 0)
+           dest   (nth memory (+ pc 3) 0)]
        #_(println "i:" i "opcode:" opcode "op1:" op1 "op2" op2 "dest:" dest)
        (case opcode
-         1  (recur (+ i 4)
+
+         ;; Add operand 0 to operand 1, storing the result in address specified by operand 2.
+         1  (recur (+ pc 4)
                    (assoc memory dest (+ (nth memory op1) (nth memory op2))))
-         2  (recur (+ i 4)
+
+         ;; Multiply operand 0 by operand 1, storing the result in address specified by operand 2.
+         2  (recur (+ pc 4)
                    (assoc memory dest (* (nth memory op1) (nth memory op2))))
+
+         ;; End the program, returning the final memory state.
          99 memory)))))
 
 ;; Part 2

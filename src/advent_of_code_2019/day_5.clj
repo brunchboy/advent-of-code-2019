@@ -34,48 +34,74 @@
    1005,224,659,1001,223,1,223,107,677,226,224,102,2,223,223,1005,224,674,1001,223,1,223,4,223,99,226])
 
 (defn intcode
-  "Run the day 5 intcode interpreter on the input data."
+  "Run the day 5 intcode interpreter on the input data. Input and output
+  are performed on standard in and standard out."
   ([]
    (intcode program))
   ([data]
-   (loop [i      0
-          memory data]
-     (let [load-relative   (fn [offset] (nth memory (+ i offset)))
-           instruction     (load-relative 0)
+   (loop [pc     0  ; Program counter: address of next instruction to be executed.
+          memory data]  ; Relative addressing mode base address.
+     (let [load-from-pc    (fn [offset] (nth memory (+ pc offset)))
+           instruction     (load-from-pc 0)
            opcode          (rem instruction 100)
            modes           (clojure.string/reverse (str (quot instruction 100)))
-           resolve-operand (fn [index]
-                             (let [value (load-relative (inc index))
+           resolve-operand (fn [index]  ; Handles mode for a value being loaded, which can be immediate.
+                             (let [value (load-from-pc (inc index))
                                    mode  (nth modes index \0)]
                                (case mode
                                  \0 (nth memory value)
-                                 \1 value)))]
-       #_(println "i:" i "opcode:" opcode "op1:" op1 "op2" op2 "dest:" dest)
+                                 \1 value)))
+           resolve-address (fn [index]  ; Handles mode for a value being stored, which can never be immediate.
+                             (let [value (load-from-pc (inc index))
+                                   mode  (nth modes index \0)]
+                               (case mode  ; We still use a case statement to crash if we get an usupported mode.
+                                 \0 value)))]
+       #_(println "pc:" pc "opcode:" opcode "modes:" modes #_"mem:" #_memory)
+
+       ;; Decode an instruction and compute appropriate new values for
+       ;; the program counter, relative addressing mode base, memory,
+       ;; performing input or output as needed.
        (case opcode
-         1  (recur (+ i 4)  ; Add
-                   (assoc memory (load-relative 3) (+ (resolve-operand 0) (resolve-operand 1))))
-         2  (recur (+ i 4)  ; Multiply
-                   (assoc memory (load-relative 3) (* (resolve-operand 0) (resolve-operand 1))))
-         3  (recur (+ i 2)  ; Read
-                   (assoc memory (load-relative 1) (read)))
-         4  (recur (+ i 2)  ; Print
+
+         ;; Add operand 0 to operand 1, storing the result in address specified by operand 2.
+         1  (recur (+ pc 4)
+                   (assoc memory (resolve-address 2) (+ (resolve-operand 0) (resolve-operand 1))))
+
+         ;; Multiply operand 0 by operand 1, storing the result in address specified by operand 2.
+         2  (recur (+ pc 4)
+                   (assoc memory (resolve-address 2) (* (resolve-operand 0) (resolve-operand 1))))
+
+         ;; Read an input value, storing it in the address specified by operand 0.
+         3  (recur (+ pc 2)
+                   (assoc memory (resolve-address 0) (read)))
+
+         ;; Output the value specified by operand 0.
+         4  (recur (+ pc 2)
                    (do
                      (println (resolve-operand 0))
                      memory))
-         5  (recur (if (zero? (resolve-operand 0))  ; Jump if true
-                     (+ i 3)
+
+         ;; If the value of operand 0 is true (non-zero) jump to the address found in operand 1.
+         5  (recur (if (zero? (resolve-operand 0))
+                     (+ pc 3)
                      (resolve-operand 1))
                    memory)
-         6  (recur (if (zero? (resolve-operand 0))  ; Jump if false
+
+         ;; If the value of operand 0 is false (zero) jump to the address found in operand 1.
+         6  (recur (if (zero? (resolve-operand 0))
                      (resolve-operand 1)
-                     (+ i 3))
+                     (+ pc 3))
                    memory)
-         7  (recur (+ i 4)  ; Less than
-                   (assoc memory (load-relative 3)
+
+         ;; Store a 1 in the address specified by operand 2 if operand 0 is less than operand 1, otherwise store a 0.
+         7  (recur (+ pc 4)
+                   (assoc memory (resolve-address 2)
                           (if (< (resolve-operand 0) (resolve-operand 1)) 1 0)))
-         8  (recur (+ i 4)  ; Equals
-                   (assoc memory (load-relative 3)
+
+         ;; Store a 1 in the address specified by operand 2 if operand 0 equals operand 1, otherwise store a 0.
+         8  (recur (+ pc 4)
+                   (assoc memory (resolve-address 2)
                           (if (= (resolve-operand 0) (resolve-operand 1)) 1 0)))
-         99 memory
-         (println "Unknown opcode:" opcode))))
-   nil))
+
+         ;; End the program.
+         99 nil)))))
