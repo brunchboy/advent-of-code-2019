@@ -30,15 +30,15 @@
   calculate the distance to the asteroid in case part 2 might want it."
   [origin asteroids]
   (filter identity
-          (for [target asteroids]
-            (when (not= target origin)
-              (let [[origin-x origin-y] origin
-                    [target-x target-y] target
-                    x                   (double (- origin-x target-x))
-                    y                   (double (- origin-y target-y))
-                    r                   (Math/hypot x y)
-                    θ                   (Math/atan2 y x)]
-                [target-x target-y θ r])))))
+          (for [target asteroids
+                :when  (not= target origin)]
+            (let [[origin-x origin-y] origin
+                  [target-x target-y] target
+                  x                   (double (- origin-x target-x))
+                  y                   (double (- origin-y target-y))
+                  r                   (Math/hypot x y)
+                  θ                   (Math/atan2 y x)]
+              [target-x target-y θ r]))))
 
 (defn num-visible-from
   "Given a list of asteroid coordinates and an origin asteroid, returns
