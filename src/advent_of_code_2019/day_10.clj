@@ -36,7 +36,7 @@
                     [target-x target-y] target
                     x                   (double (- origin-x target-x))
                     y                   (double (- origin-y target-y))
-                    r                   (Math/sqrt (+ (* x x) (* y y)))
+                    r                   (Math/hypot x y)
                     θ                   (Math/atan2 y x)]
                 [target-x target-y θ r])))))
 
