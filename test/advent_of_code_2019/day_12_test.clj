@@ -44,3 +44,19 @@
 
 (test/deftest part-2
   (test/is (= 467034091553512 (sut/steps-until-match sut/initial-state))))
+
+;; Improved Part 2
+
+(test/deftest sample-1-parallel-steps-until-match
+  (test/is (= 2772 (sut/parallel-steps-until-match sample-1-initial-state))))
+
+(test/deftest part-2-improved
+  (test/is (= 467034091553512 (sut/parallel-steps-until-match sut/initial-state))))
+
+;; Stateless Part 2
+
+(test/deftest sample-1-stateless-steps-until-match
+  (test/is (= 2772 (sut/stateless-steps-until-match sample-1-initial-state))))
+
+(test/deftest part-2-stateless
+  (test/is (= 467034091553512 (sut/stateless-steps-until-match sut/initial-state))))

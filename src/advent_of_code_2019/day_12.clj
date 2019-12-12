@@ -59,6 +59,8 @@
   [moons]
   (apply + (map moon-energy moons)))
 
+;; Part 2, first version.
+
 (defn extract-axis-pairs
   "Pull out all the numbers that affect a single spatial axis from the
   current system state."
@@ -89,6 +91,7 @@
   [a b]
   (/ (* a b) (gcd a b)))
 
+;; This works! It takes less than twelve seconds to find the problem solution.
 (defn steps-until-match
   "Solve part 2 by finding how long the cycles are in each of the three
   axes, and then calculating the least common multiple of them."
@@ -111,3 +114,80 @@
                               (record-period-when-first-seen steps y-state y-sap)
                               (record-period-when-first-seen steps z-state z-sap)]))))]
     (reduce lcm periods)))
+
+;; Part 2, improved version.
+
+(defn gravity-delta-for-axis
+  "Calculates change in velocity for a single axis due to relative
+  position of two moons."
+  [subject other]
+  (signum (- (first other) (first subject))))
+
+(defn gravity-step-for-axis
+  "Updates the axis state for a single step of the simplified notion
+  of gravity, on a single axis."
+  [moons]
+  (let [moons-set (set moons)]
+    (vec (for [moon moons]
+           (let [[s v]  moon
+                 deltas (map (partial gravity-delta-for-axis moon) (clojure.set/difference moons-set #{moon}))]
+             [s (apply + (conj deltas v))])))))
+
+
+(defn step-for-axis
+  "Computes a step in the evolution of a single axis of the system,
+  first applying gravity to update the velocities of the moons, and
+  then moving them based on the resulting velocity."
+  [moons]
+  (vec (for [[s v] (gravity-step-for-axis moons)]
+         [(+ s v) v])))
+
+(defn steps-until-match-for-axis
+  "Finds the cycle time of a single axis, given the position and
+  velocity values for only that axis."
+  [initial-axis-state]
+  (let [one-dimensional-moons (mapv vec (partition 2 (apply interleave initial-axis-state)))]
+    (loop [steps 0
+           state one-dimensional-moons
+           seen #{}]
+      (if (seen state)
+        steps
+        (recur (inc steps)
+               (step-for-axis state)
+               (conj seen state))))))
+
+;; This works even better! It gets more than the roughly triple
+;; speedup you would expect by using a separate thread to work on each
+;; axis, because the work is also simpler at each step, there is no
+;; need to slice out the individual axes and reassemble them each
+;; time. Finishes the problem in under 2.5 seconds.
+(defn parallel-steps-until-match
+  "A more elegant version of the solution that solves for each of the
+  three axes on its own thread."
+  [moons]
+  (let [axis-slices (partition 2 (apply interleave (partition 3 (apply mapv vector moons))))]
+    (reduce lcm (pmap steps-until-match-for-axis axis-slices))))
+
+;; Finally, we don't even need to accumulate seen states, because each step is reversible!
+
+(defn stateless-steps-until-match-for-axis
+  "Finds the cycle time of a single axis, given the position and
+  velocity values for only that axis, without accumulating the set of
+  all sites seen along the way."
+  [initial-axis-state]
+  (let [one-dimensional-moons (mapv vec (partition 2 (apply interleave initial-axis-state)))]
+    (loop [steps 0
+           state one-dimensional-moons]
+      (if (and (pos? steps) (= state one-dimensional-moons))
+        steps
+        (recur (inc steps)
+               (step-for-axis state))))))
+
+;; Fastest, although it turns out that skipping the state accumulation
+;; saves only about 200 ms solving the problem, completing in around
+;; 2.2 seconds.
+(defn stateless-steps-until-match
+  "Parallel driver for the stateless solution."
+  [moons]
+  (let [axis-slices (partition 2 (apply interleave (partition 3 (apply mapv vector moons))))]
+    (reduce lcm (pmap stateless-steps-until-match-for-axis axis-slices))))
