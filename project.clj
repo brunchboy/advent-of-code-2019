@@ -7,4 +7,4 @@
                  [org.clojure/math.combinatorics "0.1.6"]
                  [org.clojure/core.async "0.6.532"]]
   :repl-options {:init-ns advent-of-code-2019.core}
-  :jvm-opts ["-Xss512m"])
+  :jvm-opts [#_"-Xmx30g" #_"-Xss512m"])
