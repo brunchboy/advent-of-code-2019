@@ -24,24 +24,20 @@
 
 ;; Part 2
 
-(def state-snapshot
-  "Holds the last interpreter state, so it can be captured for restart if desired."
-  (atom {}))
-
 (defn intcode-async-restartable
   "Extended version of the day 9 asynchronous intcode interpreter,
   adding the ability to snapshot state, and restart from that state"
   ([input-chan output-chan]
    (intcode-async-restartable program input-chan output-chan 0 0))
   ([program-data input-chan output-chan]
-   (intcode-async-restartable program-data input-chan output-chan 0 0))
-  ([program-data input-chan output-chan initial-pc initial-rel-base]
+   (intcode-async-restartable program-data input-chan output-chan 0 0 nil))
+  ([program-data input-chan output-chan initial-pc initial-rel-base state-chan]
    (a/go-loop [pc       initial-pc        ; Program counter: address of next instruction to be executed.
                rel-base initial-rel-base  ; Relative addressing mode base address.
                memory   program-data]     ; The entire memory of the computer, initialized with the program contents.
-     (reset! state-snapshot {:pc       pc
-                             :rel-base rel-base
-                             :memory   memory})
+     (when state-chan (>! state-chan {:pc       pc
+                                      :rel-base rel-base
+                                      :memory   memory}))
      (let [load-from-pc    (fn [offset] (nth memory (+ pc offset) 0))
            instruction     (load-from-pc 0)
            opcode          (rem instruction 100)
@@ -110,8 +106,10 @@
          ;; Add the value of operand zero to the relative address base.
          9 (recur (+ pc 2) (+ rel-base (resolve-operand 0)) memory)
 
-         ;; End the program, closing the output channel.
-         99 (a/close! output-chan))))))
+         ;; End the program, closing the output channel and the state channel if one is in use.
+         99 (do
+              (a/close! output-chan)
+              (when state-chan (a/close! state-chan))))))))
 
 (def saved-game
   "Holds information for restarting the game."
@@ -127,7 +125,11 @@
 (defn update-tile
   "Draws the specified tile at the specified screen location."
   [term x y tile]
-  (swap! saved-game assoc-in [:latest-screen [x y]] tile)
+  (swap! saved-game update :latest-screen
+         (fn [screen]
+           (if (zero? tile)
+             (dissoc screen [x y])
+             (assoc screen [x y] tile))))
   (t/put-character term (case tile
                           0 \
                           1 \#
@@ -148,21 +150,28 @@
   ([]
    (play false))
   ([restore]
-   (let [input-chan   (a/chan 5)
-         output-chan  (a/chan 5)
-         joystick-pos (atom 0) ; Start with joystick in neutral position.
-         game         (if (and restore (:memory @saved-game))
-                        (intcode-async-restartable (:memory @saved-game) input-chan output-chan
-                                                   (:pc @saved-game) (:rel-base @saved-game))
-                        (intcode-async-restartable (assoc program 0 2) input-chan output-chan))
-         term         (t/get-terminal :swing)]
+   (let [input-chan     (a/chan 5)
+         output-chan    (a/chan 5)
+         state-chan     (a/chan 5)
+         state-snapshot (atom {})
+         joystick-pos   (atom 0) ; Start with joystick in neutral position.
+         game           (if (and restore (:memory @saved-game))
+                          (intcode-async-restartable (:memory @saved-game) input-chan output-chan
+                                                     (:pc @saved-game) (:rel-base @saved-game) state-chan)
+                          (intcode-async-restartable (assoc program 0 2) input-chan output-chan 0 0 state-chan))
+         term           (t/get-terminal :swing)]
 
-     (t/start term)  ; Display the game window
-     (when restore
+     (t/start term)  ; Display the game window.
+     (when restore   ; Restore the old contents if we are loading a saved game.
        (swap! saved-game update assoc :latest-screen {})
        (doseq [[[x y] tile] (:screen @saved-game)]
          (update-tile term x y tile))
        (show-score term (:score @saved-game)))
+
+     (a/go-loop []  ; Update the intcode computer's state snapshot whenever it sends us a new one.
+       (when-let [snapshot (<! state-chan)]
+         (reset! state-snapshot snapshot)
+         (recur)))
 
      (future  ; Update the joystick position in response to keystrokes and handle save requests.
        (loop [k (t/get-key-blocking term)]
