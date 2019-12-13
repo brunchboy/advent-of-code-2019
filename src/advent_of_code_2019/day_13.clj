@@ -174,23 +174,27 @@
          (recur)))
 
      (future  ; Update the joystick position in response to keystrokes and handle save requests.
-       (loop [k (t/get-key-blocking term)]
-         (if (= k \s)
-           (do
-             (swap! saved-game
-                    (fn [old-state]
-                      (merge old-state
-                             @state-snapshot
-                             {:screen (:latest-screen old-state)
-                              :score  (:latest-score old-state)})))
-             (t/put-string term "Saved!" 60 22))
+       (loop [k    (t/get-key-blocking term)]
+         (case k
+           \s (do  ; Special "Save game state" command.
+                (swap! saved-game
+                       (fn [old-state]
+                         (merge old-state
+                                @state-snapshot
+                                {:screen (:latest-screen old-state)
+                                 :score  (:latest-score old-state)})))
+                (t/put-string term "Saved!" 60 22)
+                (recur (t/get-key-blocking term)))
+           \q (do  ; Special "Quit" command, stops this loop and closes the terminal window.
+                (t/stop term)
+                (.close term))
            (do
              (reset! joystick-pos (case k
                                     :left  -1
                                     :right 1
                                     0))
-             (>!! input-chan @joystick-pos)))  ; This is only here because of the commented out go-loop below.
-         (recur (t/get-key-blocking term))))
+             (>!! input-chan @joystick-pos)  ; This is only here because of the commented out go-loop below.
+             (recur (t/get-key-blocking term))))))
 
      ;; To make this solvable, we are only updating the frame after each keystroke.
      #_(a/go-loop []  ; Feed joystick positions at the configured rate.
