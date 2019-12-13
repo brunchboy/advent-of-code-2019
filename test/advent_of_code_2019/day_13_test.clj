@@ -8,6 +8,7 @@
 
 (defn restore-to-near-end
   "Sets the saved game to one that is nearly finished."
+  []
   (reset! sut/saved-game
           {:rel-base 2120,
            :memory
