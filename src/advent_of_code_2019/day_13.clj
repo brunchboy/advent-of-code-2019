@@ -2,7 +2,7 @@
   "Solutions to the Day 13 problems."
   (:require [clojure.repl :refer :all]
             [clojure.core.async :as a :refer [>! <! >!! <!!]]
-            [advent-of-code-2019.day-9 :refer [intcode-async]]
+            [advent-of-code-2019.day-9 :refer [intcode-async assoc-growing]]
             [lanterna.terminal :as t]))
 
 (def program
@@ -24,14 +24,110 @@
 
 ;; Part 2
 
+(def state-snapshot
+  "Holds the last interpreter state, so it can be captured for restart if desired."
+  (atom {}))
+
+(defn intcode-async-restartable
+  "Extended version of the day 9 asynchronous intcode interpreter,
+  adding the ability to snapshot state, and restart from that state"
+  ([input-chan output-chan]
+   (intcode-async-restartable program input-chan output-chan 0 0))
+  ([program-data input-chan output-chan]
+   (intcode-async-restartable program-data input-chan output-chan 0 0))
+  ([program-data input-chan output-chan initial-pc initial-rel-base]
+   (a/go-loop [pc       initial-pc        ; Program counter: address of next instruction to be executed.
+               rel-base initial-rel-base  ; Relative addressing mode base address.
+               memory   program-data]     ; The entire memory of the computer, initialized with the program contents.
+     (reset! state-snapshot {:pc       pc
+                             :rel-base rel-base
+                             :memory   memory})
+     (let [load-from-pc    (fn [offset] (nth memory (+ pc offset) 0))
+           instruction     (load-from-pc 0)
+           opcode          (rem instruction 100)
+           modes           (clojure.string/reverse (str (quot instruction 100)))
+           resolve-operand (fn [index]  ; Handles mode for a value being loaded, which can be immediate.
+                             (let [value (load-from-pc (inc index))
+                                   mode  (nth modes index \0)]
+                               (case mode
+                                 \0 (nth memory value 0)
+                                 \1 value
+                                 \2 (nth memory (+ rel-base value) 0))))
+           resolve-address (fn [index]  ; Handles mode for a value being stored, which can never be immediate.
+                             (let [value (load-from-pc (inc index))
+                                   mode  (nth modes index \0)]
+                               (case mode
+                                 \0 value
+                                 \2 (+ rel-base value))))]
+
+       ;; Decode an instruction and compute appropriate new values for
+       ;; the program counter, relative addressing mode base, memory,
+       ;; and perform I/O on the input/output channels when needed.
+       (case opcode
+
+         ;; Add operand 0 to operand 1, storing the result in address specified by operand 2.
+         1 (recur (+ pc 4) rel-base
+                  (assoc-growing memory (resolve-address 2) (+ (resolve-operand 0) (resolve-operand 1))))
+
+         ;; Multiply operand 0 by operand 1, storing the result in address specified by operand 2.
+         2 (recur (+ pc 4) rel-base
+                  (assoc-growing memory (resolve-address 2) (* (resolve-operand 0) (resolve-operand 1))))
+
+         ;; Read an input value, storing it in the address specified by operand 0.
+         3 (recur (+ pc 2) rel-base
+                  (assoc-growing memory (resolve-address 0) (<! input-chan)))
+
+         ;; Output the value specified by operand 0.
+         4 (recur (+ pc 2) rel-base
+                  (do
+                    (>! output-chan (resolve-operand 0))
+                    memory))
+
+         ;; If the value of operand 0 is true (non-zero) jump to the address found in operand 1.
+         5 (recur (if (zero? (resolve-operand 0))
+                    (+ pc 3)
+                    (resolve-operand 1))
+                  rel-base
+                  memory)
+
+         ;; If the value of operand 0 is false (zero) jump to the address found in operand 1.
+         6 (recur (if (zero? (resolve-operand 0))
+                    (resolve-operand 1)
+                    (+ pc 3))
+                  rel-base
+                  memory)
+
+         ;; Store a 1 in the address specified by operand 2 if operand 0 is less than operand 1, otherwise store a 0.
+         7 (recur (+ pc 4) rel-base
+                  (assoc-growing memory (resolve-address 2)
+                                 (if (< (resolve-operand 0) (resolve-operand 1)) 1 0)))
+
+         ;; Store a 1 in the address specified by operand 2 if operand 0 equals operand 1, otherwise store a 0.
+         8 (recur (+ pc 4) rel-base
+                  (assoc-growing  memory (resolve-address 2)
+                                  (if (= (resolve-operand 0) (resolve-operand 1)) 1 0)))
+
+         ;; Add the value of operand zero to the relative address base.
+         9 (recur (+ pc 2) (+ rel-base (resolve-operand 0)) memory)
+
+         ;; End the program, closing the output channel.
+         99 (a/close! output-chan))))))
+
+(def saved-game
+  "Holds information for restarting the game."
+  (atom {}))
+
 (defn show-score
   "Draws the current score."
   [term score]
-  (t/put-string term (str "Score: " score "     ") 5 22))
+  (swap! saved-game assoc :latest-score score)
+  (t/put-string term (str "Score: " score "     ") 5 22)
+  (t/put-string term "      " 60 22))
 
 (defn update-tile
   "Draws the specified tile at the specified screen location."
   [term x y tile]
+  (swap! saved-game assoc-in [:latest-screen [x y]] tile)
   (t/put-character term (case tile
                           0 \
                           1 \#
@@ -39,40 +135,65 @@
                           3 \-
                           4 \o
                           \?)
-                   x y))
+                   x y)
+  (t/put-string term "      " 60 22))
+
+(def interframe-time
+  "How long, in milliseconds, between when we feed the next joystick
+  position."
+  (atom 1000))
 
 (defn play
   "Run the arcade game."
-  []
-  (let [input-chan   (a/chan 5)
-        mix          (a/mix input-chan)
-        output-chan  (a/chan 5)
-        left-chan    (a/chan)
-        right-chan   (a/chan)
-        neutral-chan (a/chan)
-        joystick-pos (atom neutral-chan) ; Start with joystick in neutral position
-        game         (intcode-async (assoc program 0 2) input-chan output-chan)
-        term         (t/get-terminal :swing)]
-    (t/start term)
-    (a/onto-chan neutral-chan (repeat 0))
-    (a/onto-chan left-chan (repeat -1))
-    (a/onto-chan right-chan (repeat 1))
-    (a/admix mix @joystick-pos)  ; Send an infinite stream of the current joystick position.
-    (future
-      (loop [k (t/get-key-blocking term)]
-        (a/unmix mix @joystick-pos)  ; Switch to whatever joystick position has now been chosen
-        (reset! joystick-pos (case k
-                               :left  left-chan
-                               :right right-chan
-                               neutral-chan))
-        (a/admix mix @joystick-pos)
-        (println "Got key" k)
-        (recur (t/get-key-blocking term))))
-    (loop []
-      (if-let [x (<!! output-chan)]
-        (let [y  (<!! output-chan)
-              id (<!! output-chan)]
-          (if (= [x y] [-1 0])
-            (show-score term id)
-            (update-tile term x y id))
-          (recur))))))
+  ([]
+   (play false))
+  ([restore]
+   (let [input-chan   (a/chan 5)
+         output-chan  (a/chan 5)
+         joystick-pos (atom 0) ; Start with joystick in neutral position.
+         game         (if (and restore (:memory @saved-game))
+                        (intcode-async-restartable (:memory @saved-game) input-chan output-chan
+                                                   (:pc @saved-game) (:rel-base @saved-game))
+                        (intcode-async-restartable (assoc program 0 2) input-chan output-chan))
+         term         (t/get-terminal :swing)]
+
+     (t/start term)  ; Display the game window
+     (when restore
+       (swap! saved-game update assoc :latest-screen {})
+       (doseq [[[x y] tile] (:screen @saved-game)]
+         (update-tile term x y tile))
+       (show-score term (:score @saved-game)))
+
+     (future  ; Update the joystick position in response to keystrokes and handle save requests.
+       (loop [k (t/get-key-blocking term)]
+         (if (= k \s)
+           (do
+             (swap! saved-game
+                    (fn [old-state]
+                      (merge old-state
+                             @state-snapshot
+                             {:screen (:latest-screen old-state)
+                              :score  (:latest-score old-state)})))
+             (t/put-string term "Saved!" 60 22))
+           (do
+             (reset! joystick-pos (case k
+                                    :left  -1
+                                    :right 1
+                                    0))
+             (>!! input-chan @joystick-pos)))  ; This is only here because of the commented out go-loop below.
+         (recur (t/get-key-blocking term))))
+
+     ;; To make this solvable, we are only updating the frame after each keystroke.
+     #_(a/go-loop []  ; Feed joystick positions at the configured rate.
+         (<! (a/timeout @interframe-time))
+         (>! input-chan @joystick-pos)
+         (recur))
+
+     (loop []  ; Update the screen in response to output from the program.
+       (if-let [x (<!! output-chan)]
+         (let [y  (<!! output-chan)
+               id (<!! output-chan)]
+           (if (= [x y] [-1 0])
+             (show-score term id)
+             (update-tile term x y id))
+           (recur)))))))
