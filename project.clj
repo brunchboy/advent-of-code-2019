@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/math.combinatorics "0.1.6"]
                  [org.clojure/core.async "0.6.532"]
-                 [clojure-lanterna "0.9.4"]]
+                 [clojure-lanterna "0.9.4"]
+                 [com.taoensso/timbre "4.10.0"]]
   :repl-options {:init-ns advent-of-code-2019.core}
   :jvm-opts [#_"-Xmx30g" #_"-Xss512m"])
