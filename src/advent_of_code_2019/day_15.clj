@@ -138,7 +138,23 @@
       (let [new-cells (spread-oxygen oxygen)]
         (if (empty? new-cells)
           minutes
-          (recur (inc minutes) (clojure.set/union oxygen new-cells))))))
+          (recur (inc minutes) (clojure.set/union oxygen new-cells)))))))
 
-
-)
+(defn draw-walls-for-vince
+  "Vince wanted to know, before starting part 1, if it was a traditional
+  maze or if there were any large open spaces. This assumes `part-2`
+  has been run to populate the `walls` set."
+  []
+  (let [min-x (reduce min (map first @walls))
+        min-y (reduce min (map second @walls))
+        max-x (reduce max (map first @walls))
+        max-y (reduce max (map second @walls))
+        term  (t/get-terminal :swing {:rows (- max-x min-x) :cols (- max-y min-y)})]
+    (t/start term)
+    (doseq [[x y] @walls]
+      (t/put-character term \# (- x min-x) (- y min-y)))
+    (t/set-bg-color term :green)
+    (t/put-character term \S (- min-x) (- min-y))
+    (t/set-bg-color term :cyan)
+    (apply t/put-character term \O @oxygen-system)
+    (t/move-cursor term 0 0)))
