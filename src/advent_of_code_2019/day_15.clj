@@ -1,5 +1,5 @@
 (ns advent-of-code-2019.day-15
-  "Solutions to the Day 13 problems."
+  "Solutions to the Day 15 problems."
   (:require [clojure.repl :refer :all]
             [clojure.core.async :as a :refer [>! <! >!! <!!]]
             [advent-of-code-2019.day-9 :refer [intcode-async]]
