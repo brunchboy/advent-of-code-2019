@@ -30,44 +30,21 @@
       (recur (fft-phase digits) (dec phases))
       (clojure.string/join digits))))
 
-;; Part 2
-
-(defn fft2-phase
-  "A slightly more efficient version of fft, based on noticing some
-  patterns about which digits matter, but I hate this, it still took
-  about two hours to find the solution."
-  [digits]
-  (let [sums (loop [result    []
-                    sum       0
-                    remaining digits]
-               (if-let [current (first remaining)]
-                 (recur (conj result sum)
-                        (+ sum current)
-                        (rest remaining))
-                 result))]
-    (loop [result []
-           i      0]
-      (if (< i (count digits))
-        (recur
-         (conj result (loop [element 0
-                             sign    1
-                             offsets (range i (count digits) (* 2 (inc i)))]
-                        (if-let [offset (first offsets)]
-                          (let [element (+ element (* sign (- (nth sums (min (+ i offset 1) (dec (count sums))))
-                                                              (nth sums offset))))]
-                     (recur element (- sign) (rest offsets)))
-                          (mod (Math/abs element) 10))))
-         (inc i))
-        result))))
+;; Part 2, a much better approach discovered Sarah Murphy, based on
+;; noticing that in addition to only needing to deal with the end of
+;; the digits and work backwards, the coefficients follow Pascal's
+;; triangle.
+(defn generate-phases
+  "Create a lazy sequence "
+  [input]
+  (iterate (partial reductions #(mod (+ %1 %2) 10)) input))
 
 (defn fft2
-  "Solve part 2... oh so slowly."
+  "Solves part 2, much faster!"
   [input phases]
-  (loop [digits (vec (apply concat (repeat 10000 (split-digits input))))
-         phases phases]
-    (if (pos? phases)
-      (do
-        (println "phases:" phases)
-        (recur (fft2-phase digits) (dec phases)))
-      (let [offset (Long/valueOf (subs input 0 7))]
-        (clojure.string/join (take 8 (drop offset digits)))))))
+  (let [offset (Long/valueOf (subs input 0 7))
+        digits (vec (drop offset (apply concat (repeat 10000 (split-digits input)))))]
+    (apply str (map #(mod % 10)
+                    (take 8 ;; take the first 8, since a bunch of numbers were dropped above
+                          (reverse
+                           (nth (generate-phases (vec (reverse digits))) phases)))))))
