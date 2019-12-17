@@ -56,21 +56,11 @@
   "Run the 'ASCII` program and collect the map data, then scan it for
   intersections and add up their coordinate products."
   []
-  (let [scaffold-map (vec (remove clojure.string/blank? (gather-map (intcode program []))))
-        height       (count scaffold-map)]
-    (loop [y      1
-           result 0]
-      (if (> y (- height 2))
-        result
-        (recur (inc y)
-               (+ result (loop [x          1
-                                row-result 0
-                                width (count (nth scaffold-map y))]
-                           (if (> x (- width 2))
-                             row-result
-                             (recur (inc x)
-                                    (+ row-result (intersection-score scaffold-map x y))
-                                    width)))))))))
+  (let [scaffold-map (vec (remove clojure.string/blank? (gather-map (intcode program []))))]
+    (apply + (map (fn [[x y]] (intersection-score scaffold-map x y))
+                  (for [y (range 1 (dec (count scaffold-map)))
+                        x (range 1 (dec (count (nth scaffold-map y))))]
+                      [x y])))))
 
 (defn part-2
   "I still have not figured out how to break it into three small enough
