@@ -62,6 +62,31 @@
                         x (range 1 (dec (count (nth scaffold-map y))))]
                       [x y])))))
 
+(def full-move-list
+  "The full set of moves the vacuum robot needs to take in order to
+  traverse the scaffolding."
+  (str "L,10,L,6,R,10,R,6,R,8,R,8,R,8,L,6,R,8,L,10,L,6,R,10,L,10,R,8,R,8,"
+       "L,10,R,6,R,8,R,8,L,6,R,8,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8,L,10"
+       ",L,6,R,10,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8"))
+
+(defn all-partitions-from-here
+  [moves]
+  (when (seq moves)
+    (for [i (range 1 (count moves))]
+      (let [prefix (list (clojure.string/join "," (take i moves)))]
+        (println prefix (drop i moves))
+        #_(concat prefix (drop i moves))
+        (mapcat (partial concat prefix) (all-partitions-from-here (drop i moves)))))))
+
+(defn all-partitions
+  "Generates every possible way to split up the move list, assuming that
+  we don't need to break it up down any further than a rotation
+  followed by the full amount to move in that direction."
+  []
+  (let [moves (map (partial clojure.string/join ",")
+                   (partition 2 (clojure.string/split full-move-list #",")))]
+    (all-partitions-from-here moves)))
+
 (defn part-2
   "I still have not figured out how to break it into three small enough
   movement functions. I am pretty sure I am going to have to split
