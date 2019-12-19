@@ -1,6 +1,5 @@
 (ns advent-of-code-2019.day-19-test
   (:require [advent-of-code-2019.day-19 :as sut]
-            [clojure.test :as t]
             [clojure.test :as test]))
 
 (test/deftest origin-covered

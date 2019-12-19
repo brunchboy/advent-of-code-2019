@@ -9,4 +9,4 @@
                  [clojure-lanterna "0.9.4"]
                  [com.taoensso/timbre "4.10.0"]]
   :repl-options {:init-ns advent-of-code-2019.core}
-  :jvm-opts [#_"-Xmx30g" #_"-Xss512m"])
+  :jvm-opts [#_"-Xmx30g" "-Xss512m"])
