@@ -58,6 +58,9 @@
 (def best-steps-for-key-orderings
   (atom {}))
 
+(def best-solutions
+  (atom [Long/MAX_VALUE #{}]))
+
 (defn try-direction
   "Checks what lies in a particular direction from the current
   coordinates, and proceeds accordingly."
@@ -69,12 +72,19 @@
       (or ((:walls state) [x y]) ((:visited state) [x y]) ((:doors state) [x y]))
       Long/MAX_VALUE ; We can't move this direction, at least not yet.
 
+      (> steps (first @best-solutions))
+      (do
+        #_(println "Abandoning branch because slower than existing best solutions.")
+        Long/MAX_VALUE)
+
       key-found
       (let [keys-found  (conj (:keys-found state) key-found)
             best-so-far (@best-steps-for-key-orderings keys-found Long/MAX_VALUE)]
         #_(println "Best so far:" best-so-far)
         (if (<= best-so-far steps)
-          Long/MAX_VALUE  ; We already found a better or equally good way to use this key, so give up this branch.
+          (do
+            #_(println "Abandoning branch because already have faster way to find keys" keys-found)
+            Long/MAX_VALUE)  ; We already found a better or equally good way to use this key, so give up this branch.
           (let [state (-> state  ; We found a better way to use this key.
                           (update :keys dissoc [x y])  ; Note that it has been picked up.
                           (update :keys-found conj key-found)  ; Track all the keys we have found so far.
@@ -84,7 +94,13 @@
             #_(println "Found keys" (:keys-found state) "at steps" steps)
             #_(println state)
             (if (empty? (:keys state))
-              steps  ; We have solved the maze by finding the last key!
+              (do
+                (println "Found best-so-far solution! Steps:" steps "keys:" keys-found)
+                (swap! best-solutions (fn [[solution-steps solution-keys-found]]
+                                        (if (< steps solution-steps)
+                                          [steps #{keys-found}]
+                                          [solution-steps (conj solution-keys-found keys-found)])))
+                steps)  ; We have solved the maze by finding the last key!
               (visit x y steps state))))) ; And try solving the new maze from here.
 
       :else
@@ -121,6 +137,7 @@
 (defn solve
   "Sets up the state given the map that was read, and runs the solver."
   [maze]
+  (reset! best-solutions [Long/MAX_VALUE #{}])
   (reset! best-steps-for-key-orderings {})
   (let [state (initial-state-for-map maze)
         [x y] (first (keys (:player maze)))
