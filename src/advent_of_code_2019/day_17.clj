@@ -1,7 +1,7 @@
 (ns advent-of-code-2019.day-17
   "Solutions to the Day 17 problems."
   (:require [clojure.repl :refer :all]
-            [clojure.core.async :as a :refer [>! <! >!! <!!]]
+            [clojure.math.combinatorics :as combo]
             [advent-of-code-2019.day-9 :refer [intcode]]))
 
 (def program
@@ -65,9 +65,61 @@
 (def full-move-list
   "The full set of moves the vacuum robot needs to take in order to
   traverse the scaffolding."
-  (str "L,10,L,6,R,10,R,6,R,8,R,8,R,8,L,6,R,8,L,10,L,6,R,10,L,10,R,8,R,8,"
-       "L,10,R,6,R,8,R,8,L,6,R,8,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8,L,10"
-       ",L,6,R,10,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8"))
+  "L,10,L,6,R,10,R,6,R,8,R,8,L,6,R,8,L,10,L,6,R,10,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8,L,10,L,6,R,10,L,10,R,8,R,8,L,10,R,6,R,8,R,8,L,6,R,8")
+
+;; It turned out I had a transcription error in my list, an extra R,8
+;; six moves in, which made me unable to solve the problem until a
+;; friend noticed that. Sigh! Given that fix, visual inspection was
+;; enough to come up with the following solution.
+(defn part-2
+  "Run the vacuum robot with the movement instructions identified by
+  studying the map. Print the resulting state and dust count."
+  []
+  (let [response (intcode (assoc program 0 2)
+                          (map long (concat "A,B,A,C,B,C,B,A,C,B\n"
+                                            "L,10,L,6,R,10\n"
+                                            "R,6,R,8,R,8,L,6,R,8\n"
+                                            "L,10,R,8,R,8,L,10\n"
+                                            "n\n")))]
+    (doseq [code (butlast response)]
+      (print (char code)))
+    (last response)))
+
+
+
+;; These were close to working but could not find any partitions that
+;; let me have only three movement functions, due to the transcription
+;; mistake mentioned above:
+
+(defn generate-move-partitions
+  [moves]
+  (filter #(= (count moves) (apply + %))
+          (mapcat (partial combo/permuted-combinations (mapcat (partial repeat 8) (range 3 8))) (range 3 20))))
+
+(defn split-moves
+  [moves chunks]
+  (loop [result #{}
+         moves  moves
+         chunks chunks]
+    (if-let [chunk (first chunks)]
+      (recur (conj result (vec (take chunk moves)))
+             (drop chunk moves)
+             (rest chunks))
+      result)))
+
+(defn find-working-moves
+  []
+  (let [moves      (map (partial clojure.string/join ",")
+                        (partition 2 (clojure.string/split full-move-list #",")))
+        partitions (generate-move-partitions moves)
+        chunked (map (partial split-moves moves) partitions)]
+    (println (count chunked) "sets of distinct move patterns.")
+    (println (count (first chunked)) "move patterns in the first.")
+    #_(filter #(= 3 (count %)) chunked)
+    chunked))
+
+;; I couldn't get these working, and went with the more-bounded
+;; approach above instead.
 
 (defn all-partitions-from-here
   [moves]
@@ -86,12 +138,3 @@
   (let [moves (map (partial clojure.string/join ",")
                    (partition 2 (clojure.string/split full-move-list #",")))]
     (all-partitions-from-here moves)))
-
-(defn part-2
-  "I still have not figured out how to break it into three small enough
-  movement functions. I am pretty sure I am going to have to split
-  some movements between turns, but have not yet seen how to do that."
-  []
-  (intcode (assoc program 0 2)
-           (concat "A,B,A,C,D,C,D,A,C,D"
-                   "L,10,L,6,R,10\n")))
