@@ -38,12 +38,32 @@
   (test/is (= {:walls
                #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
                  [0 2] [2 0] [5 0] [6 2] [6 0] [1 2] [3 2] [0 1] [4 0]},
-               :keys       {[1 1] "b", [7 1] "a"},
-               :doors      {[3 1] "a"},
-               :visited    #{},
-               :door-index {"a" [3 1]}
-               :keys-found []}
+               :keys           {[1 1] "b", [7 1] "a"},
+               :doors          {[3 1] "a"},
+               :steps          0,
+               :pos            [5 1],
+               :keys-found     #{},
+               :doors-blocking #{},
+               :visited        #{}}
               (sut/initial-state-for-map (sut/read-maze sample-maze-1)))))
+
+(test/deftest add-route
+  (let [state   (sut/initial-state-for-map (sut/read-maze sample-maze-1))
+        updated (sut/add-route :start "a" (assoc state :steps 50 :doors-blocking #{"d" "f"} :keys-found #{"q"}))]
+    (test/is (= {:routes
+                 {:start
+                  {"a" [50 #{{:keys-found #{"q"}, :doors-blocking #{"d" "f"}}}]}},
+                 :doors          {[3 1] "a"},
+                 :steps          50,
+                 :doors-blocking #{"d" "f"},
+                 :pos            [5 1],
+                 :visited        #{},
+                 :walls
+                 #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
+                   [0 2] [2 0] [5 0] [6 2] [6 0] [1 2] [3 2] [0 1] [4 0]},
+                 :keys           {[1 1] "b", [7 1] "a"},
+                 :keys-found     #{"q"}}
+                updated))))
 
 (test/deftest solve-maze-1
   (test/is (= 8 (sut/solve (sut/read-maze sample-maze-1)))))

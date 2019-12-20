@@ -55,70 +55,122 @@
 
 (declare visit)
 
-(def best-steps-for-key-orderings
-  (atom {}))
+(def sample-state
+  "Shows the structure of the low-level maze traversal state map, used
+  when mapping out the distances and doorways between the starting
+  point and keys, and between pairs of keys. For the first pass we
+  ignore the closed state of doors and simply record the keys and
+  doors passed over on the shortest path from the starting point to
+  the ending point. If there are ties, we record the doors and keys
+  traversed on each. If we already have a key when we encounter a
+  door, the door does not get recorded because it is not an obstacle
+  on that path."
+  {:walls          #{[0 0]     ; Identifies the locations of all walls present in the maze.
+                     [2 2]}
+   :keys           {[1 1] "b" ; Identifies the locations of all keys present in the maze.
+                    [7 1] "a"}
+   :doors          {[3 1] "a"} ; Identifies the locations of all doors present in the maze.
+   :pos            [5 1]       ; Identifies the current cell being traversed.
+   :steps          0           ; Steps traversed so far / steps required for solution.
+   :keys-found     #{"a"}      ; Keys that were passed over in this traversal.
+   :doors-blocking #{"b"}      ; The doors we need keys for before this path works.
+   :visited        #{[5 1]}    ; Cells that have already been visited.
+   ;; The purpose of the first, maze-walking phase is to build up the following information.
+   :routes         {:start ; Records the steps of each best path from the start to a key,
+                    {"a" [1234 #{{:doors-blocking #{"b"} ; and the obstacles and keys found along it.
+                                  :keys-found     #{}}}] ; There may be multiple doors/keys alternatives.
+                     "b" [567 #{{:doors-blocking #{}}}]}
+                    "a" ; Records the steps of each best path from this key to all the others.
+                    {"b" [312 #{{:doors-blocking #{} ; and the obstacles and keys found along it.
+                                 :keys-found #{}}}]}}})
 
-(def best-solutions
-  (atom [Long/MAX_VALUE #{}]))
+(defn current-route
+  "Extracts the currently best-known route from start to target from
+  the state. If none is found, return a route that will be beaten by
+  any real one."
+  [start target state]
+  (get-in state [:routes start target] [Long/MAX_VALUE #{{:doors-blocking #{}
+                                                          :keys-found     #{}}}]))
+
+(defn add-route
+  "Called when we have found and are returning a route from start to
+  target. If it is better than any other such route we have seen,
+  install it as the current choice. If it has the same number of steps
+  as our current best route, add the keys and doors we saw as an
+  alternate choice to the other equal-step routes."
+  [start target
+   {:keys [steps keys-found doors-blocking] :as state}]
+  (let [current      (current-route start target state)
+        current-best (first current)
+        found-info   {:keys-found     keys-found
+                      :doors-blocking doors-blocking}]
+    (cond (< steps current-best) ; We found a new best route, so replace the old one.
+          (-> state
+              (assoc :steps steps)
+              (assoc-in [:routes start target] [steps #{found-info}]))
+
+          (= steps current-best) ; We found a tie, add our keys and doors to the existing set.
+          (update-in state [:routes start target 1] conj found-info)
+
+          :else ; Our old route was better, leave it alone.
+          state)))
+
+(defn merge-routes
+  "Called when we have found two different routes from start to target
+  in different directions. Picks the best. If they are both the same
+  length, combines their sets of keys/doors sets."
+  [start target state-1 state-2]
+  ;; TODO: Implement!
+  )
 
 (defn try-direction
   "Checks what lies in a particular direction from the current
-  coordinates, and proceeds accordingly."
-  [x y steps state direction]
-  #_(println "trying" x y steps direction)
-  (let [[x y]     (position-after-move x y direction)
-        key-found ((:keys state) [x y])]
-    (cond
-      (or ((:walls state) [x y]) ((:visited state) [x y]) ((:doors state) [x y]))
-      Long/MAX_VALUE ; We can't move this direction, at least not yet.
+  coordinates, given the key we started at (or `:start` if it is the
+  maze starting position), the key we are trying to find and the
+  current state. Returns with an updated state reflecting the best
+  outcome that can be obtained in that direction."
+  [start target
+   {:keys         [walls doors steps keys-found doors-blocking visited routes]
+    {:keys [x y]} :pos
+    :as           state}
+   direction]
+  (println "trying" x y steps direction)
+  (let [[x y]      (position-after-move x y direction)
+        key-found  ((:keys state) [x y])
+        door-found (doors [x y])]
 
-      (> steps (first @best-solutions))
-      (do
-        #_(println "Abandoning branch because slower than existing best solutions.")
-        Long/MAX_VALUE)
+    (cond
+      (or ((:walls state) [x y]) ((:visited state) [x y]))
+      (assoc state :steps Long/MAX_VALUE)
 
       key-found
-      (let [keys-found  (conj (:keys-found state) key-found)
-            best-so-far (@best-steps-for-key-orderings keys-found Long/MAX_VALUE)]
-        #_(println "Best so far:" best-so-far)
-        (if (<= best-so-far steps)
-          (do
-            #_(println "Abandoning branch because already have faster way to find keys" keys-found)
-            Long/MAX_VALUE)  ; We already found a better or equally good way to use this key, so give up this branch.
-          (let [state (-> state  ; We found a better way to use this key.
-                          (update :keys dissoc [x y])  ; Note that it has been picked up.
-                          (update :keys-found conj key-found)  ; Track all the keys we have found so far.
-                          (update :doors dissoc ((:door-index state) key-found))  ; Open (remove) corresponding door.
-                          (assoc :visited #{}))]  ; Reset our visited markers because the maze has changed.
-            (swap! best-steps-for-key-orderings assoc keys-found steps)  ; Record steps needed to get these keys.
-            #_(println "Found keys" (:keys-found state) "at steps" steps)
-            #_(println state)
-            (if (empty? (:keys state))
-              (do
-                (println "Found best-so-far solution! Steps:" steps "keys:" keys-found)
-                (swap! best-solutions (fn [[solution-steps solution-keys-found]]
-                                        (if (< steps solution-steps)
-                                          [steps #{keys-found}]
-                                          [solution-steps (conj solution-keys-found keys-found)])))
-                steps)  ; We have solved the maze by finding the last key!
-              (visit x y steps state))))) ; And try solving the new maze from here.
+      (if (= key-found target)
+        (add-route start target state) ; Found a route to the target, record it if best/equal and return.
+        (visit start target (assoc state :pos [x y] :keys-found (conj keys-found key-found))))  ; Keep looking.
 
       :else
-      (visit x y steps state))))  ; An ordinary move, continue solving from here.
+      (visit start target (assoc state :pos [x y]) state))))  ; An ordinary move, continue solving from here.
 
 (defn visit
-  "Recursive shortest path maze solver. Steps are how many steps have
-  been taken so far, and state is the current map state (which
-  includes keys found and remaining, as well as visited squares). When
-  we find a key, we update the state to remove all our visited marks
-  as well as the corresponding door, because we basically need to
-  re-solve the maze from that point. Returns the shortest number of
-  steps required to get to a state where all keys have been found, or,
-  `Long/MAX_VALUE` if it cannot be solved from this state."
-  [x y steps state]
+  "Recursive shortest path maze solver, given the key we started at (or
+  `:start` if it is the maze starting position), the key we are trying
+  to find, and the current state. Returns a state whose routes reflect
+  the smallest number of steps between those points, along with the
+  sets of keys found along the way, and doors for which other keys are
+  needed before they can be traversed. (There may be multiple
+  keys/doors set pairs in the route because there may be more than one
+  path with that number of steps.) No route will be added (and
+  `:steps` will be `Long/MAX_VALUE`) if no path was found."
+  [start target
+   {{:keys [x y]} :pos
+    :as           state}]
   #_(println x y steps visited (visited [x y]))
-  (apply min (map (partial try-direction x y (inc steps) (update state :visited conj [x y]))
-                  [:north :south :east :west])))
+  (reduce (partial merge-routes start target)
+          (map (partial try-direction
+                       (-> state
+                           (update :steps inc)
+                           (update :visited conj [x y])))
+              [:north :south :east :west])))
 
 (defn initial-state-for-map
   "Converts a maze map into the initial state needed by the solver.
@@ -129,22 +181,23 @@
   [maze]
   (-> maze
       (dissoc :player)  ; This is just used to seed the solver, below.
-      (assoc :visited #{})  ; Keep track of places we have been.
-      (assoc :door-index (clojure.set/map-invert (:doors maze)))  ; Make it easy to open them.
-      (assoc :keys-found [])  ; Keep track of the keys we have found along this path, in order.
+      (merge {:steps          0                             ; Counts steps as we explore the maze.
+              :pos            (first (keys (:player maze))) ; Tracks the location we have reached.
+              :keys-found     #{}                           ; Keys that we have passed during this traversal.
+              :doors-blocking #{}                           ; Doors we need other keys for before this path works.
+              :visited        #{}})  ; Keep track of places we have been.
+      ;; This needs to move to the higher-level solver:
+      #_(assoc :keys-found [])  ; Keep track of the keys we have found along this path, in order.
       (update :walls (fn [m] (set (keys m))))))  ; All we need is the set of coordinates.
 
 (defn solve
-  "Sets up the state given the map that was read, and runs the solver."
+  "Sets up the state given the map that was read, and runs the solvers."
   [maze]
-  (reset! best-solutions [Long/MAX_VALUE #{}])
-  (reset! best-steps-for-key-orderings {})
-  (let [state (initial-state-for-map maze)
-        [x y] (first (keys (:player maze)))
-        steps (visit x y 0 state)]
+  (let [state (visit :start "a" (initial-state-for-map maze))
+        steps (:steps state)]
     (if (= steps Long/MAX_VALUE)
       :failed
-      steps)))
+      [steps (:keys-found state)])))
 
 (def part-1-maze
   "The maze for part 1 of the problem."
