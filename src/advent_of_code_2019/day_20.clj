@@ -140,6 +140,35 @@
       :failed
       steps)))
 
+;; Part 2
+
+(defn read-maze-2
+  "Reads the lines of the maze as before, then adds more information to
+  the state to support the additional rules stipulated in part 2.
+  Separates the portals into descending and ascending, adds a
+  current-level value, and a set of descending portals that have been
+  visited."
+  [maze-text]
+  (let [maze             (read-maze maze-text)
+        maze-lines       (clojure.string/split-lines maze-text)
+        max-x            (dec (apply max (map count maze-lines)))
+        max-y            (dec (count maze-lines))
+        outward-portal-x #{1 (dec max-x)}
+        outward-portal-y #{1 (dec max-y)}
+        outward-portal?  (fn [[entrance _]]
+                           (and (indexed? entrance)
+                                (or (outward-portal-x (first entrance))
+                                    (outward-portal-y (second entrance)))))
+        inward-portal?   (fn [[entrance _]]
+                           (and (indexed? entrance)
+                                (not (or (outward-portal-x (first entrance))
+                                         (outward-portal-y (second entrance))))))]
+    (merge maze
+           {:outward-portals (into {} (filter outward-portal? (:portals maze)))
+            :inward-portals  (into {} (filter inward-portal? (:portals maze)))
+            :level           0
+            :visited-inward  #{}})))
+
 (def part-1-maze
   "The maze for part 1 of the problem."
   "                               Y       P           J       L     Y N     Q   H
