@@ -87,8 +87,8 @@
 (declare visit)
 
 (defn traverse-portals
-  "If the specified position is one end of a portal, returns the other
-  end of the portal. Otherwise returns the original position."
+  "If the specified position is the entrance of a portal, returns the
+  exit end of the portal. Otherwise returns the original position."
   [{:keys [portals]} position]
   (if-let [other-end (portals position)]
     other-end
@@ -96,8 +96,9 @@
 
 (defn try-direction
   "Checks what lies in a particular direction from the current
-  coordinates and proceeds accordingly. Returns with an updated state
-  reflecting the best outcome that can be obtained in that direction."
+  coordinates (including passage through a portal) and proceeds
+  accordingly. Returns with an updated state reflecting the best
+  outcome that can be obtained in that direction."
   [{:keys [steps path visited goal portals]
     [x y] :pos
     :as   state}
@@ -121,15 +122,16 @@
     state-2))
 
 (defn visit
-  "Recursive shortest path maze solver."
+  "Recursive shortest path maze solver, including arbitrary use of
+  portals, as specified by part 1."
   [{[x y] :pos
     :as   state}]
   (reduce best-result
           (map (partial try-direction
-                       (-> state
-                           (update :steps inc)
-                           (update :visited conj [x y])))
-              [:north :south :east :west])))
+                        (-> state
+                            (update :steps inc)
+                            (update :visited conj [x y])))
+               [:north :south :east :west])))
 
 (defn solve
   "Sets up the state given the map that was read, and runs the solvers."
@@ -166,8 +168,81 @@
     (merge maze
            {:outward-portals (into {} (filter outward-portal? (:portals maze)))
             :inward-portals  (into {} (filter inward-portal? (:portals maze)))
-            :level           0
-            :visited-inward  #{}})))
+            :level           0})))
+
+(declare visit-flat)
+
+(defn try-direction-flat
+  "Checks what lies in a particular direction from the current
+  coordinates, ignoring portals, and proceeds accordingly. Returns
+  with an updated state reflecting the best outcome that can be
+  obtained in that direction."
+  [{:keys [steps path visited goal portals]
+    [x y] :pos
+    :as   state}
+   direction]
+  (let [[x y] (position-after-move x y direction)]
+    (cond
+      (= [x y] goal)
+      state  ; We found a solution!
+
+      (and (path [x y]) (not (visited [x y])))
+      (visit-flat (assoc state :pos [x y])) ; A move to a new square, continue solving from here.
+
+      :else ; We can't move in that direction
+      (assoc state :steps Long/MAX_VALUE))))
+
+(defn visit-flat
+  "Recursive shortest path solver ignoring portals."
+  [{[x y] :pos
+    :as   state}]
+  (reduce best-result
+          (map (partial try-direction-flat
+                        (-> state
+                            (update :steps inc)
+                            (update :visited conj [x y])))
+               [:north :south :east :west])))
+
+(defn flat-distance
+ "Finds the number of steps in the best path, without using portals,
+ between the specified points in the maze, which may also be `:start`
+ to mean the starting point, and `:exit` to mean the goal at level 0."
+ [map start end]
+ (let [state (merge map
+                    {:pos (if (= start :start)
+                            (:start map)
+                            (traverse-portals map start))}
+                    (when (not= end :exit)
+                      {:goal end}))]
+   (:steps (visit-flat state))))
+
+(defn build-portal-routes
+  "Calculates the best paths (if any exist) between each pair of
+  portals, as well as between the start and inward portals, and each
+  portal outward portal and the exit."
+  [maze]
+  (let [portals-by-entrance (filter (fn [[k _]] (indexed? k)) (:portals maze))
+        portal-point-sets   (map (fn [[end-1 end-2]] (set (concat end-1 end-2)))
+                                 (map second (filter (fn [[k _]] (string? k)) (:portals maze))))]
+    (reduce (fn [routes [start end]]
+              (let [distance (flat-distance maze start end)]
+                (if (< distance Long/MAX_VALUE)
+                  (assoc routes [start end] distance)
+                  routes)))
+            {}
+            (concat (filter identity
+                            (for [[start-entrance start-exit] portals-by-entrance
+                                  [end-entrance _]            portals-by-entrance]
+                              (let [portal-points (first (filter (fn [points] (points start-entrance))
+                                                                 portal-point-sets))]
+                                (when (not (portal-points end-entrance))
+                                  [start-entrance end-entrance]))))
+                    (for [[end-entrance _] (:inward-portals maze)]
+                      [:start end-entrance])
+                    (for [[_ start-exit] (:outward-portals maze)]
+                      (do
+                        (println start-exit)
+                        [start-exit :exit]))))))
 
 (def part-1-maze
   "The maze for part 1 of the problem."
