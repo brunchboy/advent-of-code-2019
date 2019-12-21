@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-18
   "Solutions to the Day 18 problems."
-  (:require [clojure.repl :refer :all]))
+  (:require [clojure.math.combinatorics :as combo]
+            [clojure.repl :refer :all]))
 
 (defn describe-maze-cell
   "Translates a character found in the maze to the top-level key under
@@ -76,21 +77,22 @@
    :doors-blocking #{"b"}      ; The doors we need keys for before this path works.
    :visited        #{[5 1]}    ; Cells that have already been visited.
    ;; The purpose of the first, maze-walking phase is to build up the following information.
-   :routes         {:start ; Records the steps of each best path from the start to a key,
-                    {"a" [1234 #{{:doors-blocking #{"b"} ; and the obstacles and keys found along it.
-                                  :keys-found     #{}}}] ; There may be multiple doors/keys alternatives.
-                     "b" [567 #{{:doors-blocking #{}}}]}
-                    "a" ; Records the steps of each best path from this key to all the others.
-                    {"b" [312 #{{:doors-blocking #{} ; and the obstacles and keys found along it.
-                                 :keys-found #{}}}]}}})
+   :routes         {#{:start "a"}                     ; Records the steps of each best path from the start to a key,
+                    [1234 #{{:doors-blocking #{"b"} ; and the obstacles and keys found along it.
+                             :keys-found     #{}}}] ; There may be multiple doors/keys alternatives.
+                    #{:start "b"}                   ; And another route from the start to a key...
+                    [567 #{{:doors-blocking #{}}}]
+                    #{"a" "b"}                      ; Best route from one key to another in either direction.
+                    [312 #{{:doors-blocking #{}
+                            :keys-found     #{}}}]}})
 
 (defn current-route
   "Extracts the currently best-known route from start to target from
   the state. If none is found, return a route that will be beaten by
   any real one."
   [start target state]
-  (get-in state [:routes start target] [Long/MAX_VALUE #{{:doors-blocking #{}
-                                                          :keys-found     #{}}}]))
+  (get-in state [:routes #{start target}] [Long/MAX_VALUE #{{:doors-blocking #{}
+                                                             :keys-found        #{}}}]))
 
 (defn add-route
   "Called when we have found and are returning a route from start to
@@ -107,10 +109,10 @@
     (cond (< steps current-best) ; We found a new best route, so replace the old one.
           (-> state
               (assoc :steps steps)
-              (assoc-in [:routes start target] [steps #{found-info}]))
+              (assoc-in [:routes #{start target}] [steps #{found-info}]))
 
           (= steps current-best) ; We found a tie, add our keys and doors to the existing set.
-          (update-in state [:routes start target 1] conj found-info)
+          (update-in state [:routes #{start target} 1] conj found-info)
 
           :else ; Our old route was better, leave it alone.
           state)))
@@ -129,7 +131,7 @@
           state-2
 
           (= steps-2 steps-1)
-          (update-in state-1 [:routes start target 1] clojure.set/union (second route-2))
+          (update-in state-1 [:routes #{start target} 1] clojure.set/union (second route-2))
 
           :else
           state-1)))
@@ -204,7 +206,9 @@
       (update :walls (fn [m] (set (keys m))))))  ; All we need is the set of coordinates.
 
 (defn search-from
-  "Sets up a search from the specified key location"
+  "Sets up a search from the specified key location. Resets the steps
+  visited, keys-found and doors-blocking accumulators since this is a
+  new search."
   [start state]
   (let [starting-pos (if (= :start start) (first (keys (:player state))) (get-in state [:key-index start]))]
     (merge state {:pos            starting-pos ; Start from the specified key location.
@@ -219,12 +223,30 @@
   picked up along the way, and any doors that must be unlocked before
   the path can be followed. If there is more than one route with the
   same minimum steps, reports all the distinct sets of keys/doors
-  along each of them. `start` can either be `:start` (to mean the maze
-  starting point) or the name of a key; `target` is always the name of
-  a key. Resets the steps visited, keys-found and doors-blocking
-  accumulators since this is a new search."
-  [start target state]
-  (visit start target (search-from start state)))
+  along each of them. `pair` is a set of start location and target
+  key (the order does not matter because the route returns the same
+  values in either direction, but for calling `visit` in the special
+  case where we want to start at the start of the maze, one of the
+  elements will be `:start` and that will need to be the first
+  argument to `visit`."
+  [pair state]
+  (let [[start target] (if (pair :start)
+                         [:start (first (disj pair :start))]
+                         (vec pair))]
+    (visit start target (search-from start state))))
+
+(defn find-key-routes
+  "Accumulates all the best paths from the start to each key, and from
+  each key to each other key, with notes about the doors blocking
+  each, and extra keys found along the way."
+  [maze]
+  (reduce (fn [state pair]
+            (let [with-new-route (find-route pair state)]
+              (if (< (:steps with-new-route) Long/MAX_VALUE)  ; Only include working routes.
+                with-new-route
+                state)))
+          maze
+          (map set (combo/combinations (conj (keys (:key-index maze)) :start) 2))))
 
 (defn solve
   "Sets up the state given the map that was read, and runs the solvers."

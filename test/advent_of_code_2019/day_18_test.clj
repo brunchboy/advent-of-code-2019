@@ -54,8 +54,8 @@
   (let [state   (sut/initial-state-for-map (sut/read-maze sample-maze-1))
         updated (sut/add-route :start "a" (assoc state :steps 50 :doors-blocking #{"d" "f"} :keys-found #{"q"}))]
     (test/is (= {:routes
-                 {:start
-                  {"a" [50 #{{:keys-found #{"q"}, :doors-blocking #{"d" "f"}}}]}},
+                 {#{:start "a"}
+                  [50 #{{:keys-found #{"q"}, :doors-blocking #{"d" "f"}}}]},
                  :doors          {[3 1] "a"},
                  :steps          50,
                  :doors-blocking #{"d" "f"},
@@ -85,7 +85,7 @@
                  :key-index      {"b" [1 1], "a" [7 1]}
                  :keys-found     #{}
                  :player         {[5 1] :player}}
-                (sut/find-route :start "a" state)))
+                (sut/find-route #{:start "a"} state)))
     (test/is (= {:routes         {"a" {"b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]}},
                  :doors          {[3 1] "a"},
                  :steps          6,
@@ -99,7 +99,13 @@
                  :keys           {[1 1] "b", [7 1] "a"},
                  :keys-found     #{}
                  :player         {[5 1] :player}}
-                (sut/find-route "a" "b" state)))))
+                (sut/find-route #{"a" "b"} state)))
+    (test/is (= {:start
+                 {"b" [4 #{{:keys-found #{}, :doors-blocking #{"a"}}}],
+                  "a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]},
+                 "b" {"a" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]},
+                 "a" {"b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]}}
+                (:routes (sut/find-key-routes state))))))
 
 (test/deftest solve-maze-1
   (test/is (= 8 (sut/solve (sut/read-maze sample-maze-1)))))
@@ -114,9 +120,9 @@
 
 (test/deftest find-routes-2
   (let [state   (sut/initial-state-for-map (sut/read-maze sample-maze-2))
-        state-2 (sut/find-route :start "a" state)
-        state-3 (sut/find-route "a" "c" state-2)]
-    (test/is (= {:routes         {:start {"a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]}},
+        state-2 (sut/find-route #{:start "a"} state)
+        state-3 (sut/find-route #{"a" "c"} state-2)]
+    (test/is (= {:routes         {#{:start "a"} [2 #{{:keys-found #{}, :doors-blocking #{}}}]}
                  :doors          {[3 1] "d", [5 1] "e", [9 1] "c", [13 1] "a", [19 1] "b"},
                  :steps          2,
                  :doors-blocking #{},
@@ -139,8 +145,8 @@
                  :player         {[15 1] :player}}
                 state-2))
     (test/is (= {:routes
-                 {:start {"a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]},
-                  "a"    {"c" [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}]}},
+                 {#{"a" "c"}    [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}],
+                  #{:start "a"} [2 #{{:keys-found #{}, :doors-blocking #{}}}]},
                  :doors          {[3 1] "d", [5 1] "e", [9 1] "c", [13 1] "a", [19 1] "b"},
                  :steps          4,
                  :doors-blocking #{"b"},
@@ -162,14 +168,49 @@
                  :keys-found     #{}
                  :player         {[15 1] :player}}
                 state-3))
-    (test/is (= {:start {"a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]},
-                 "a"          {"c" [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}]},
-                 "d"
-                 {"f"
-                  [44
-                   #{{:keys-found     #{"e" "a" "b" "c"},
-                      :doors-blocking #{"d" "e" "a" "b" "c"}}}]}}
-                (:routes (sut/find-route "d" "f" state-3))))))
+    (test/is (= {#{:start "a"} [2 #{{:keys-found #{}, :doors-blocking #{}}}],
+                 #{"a" "c"}    [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}],
+                 #{"d" "f"}
+                 [44
+                  #{{:keys-found     #{"e" "a" "b" "c"},
+                     :doors-blocking #{"d" "e" "a" "b" "c"}}}]}
+                (:routes (sut/find-route #{"d" "f"} state-3))))
+    (test/is (= {#{"d" "c"}     [24 #{{:keys-found #{}, :doors-blocking #{}}}],
+                 #{"f" :start}
+                 [14 #{{:keys-found #{"e" "b"}, :doors-blocking #{"d" "e" "a" "c"}}}],
+                 #{"e" "a"}    [10 #{{:keys-found #{"b"}, :doors-blocking #{"a" "c"}}}],
+                 #{"f" "a"}
+                 [16 #{{:keys-found #{"e" "b"}, :doors-blocking #{"d" "e" "a" "c"}}}],
+                 #{"d" :start}
+                 [30 #{{:keys-found #{"a" "c"}, :doors-blocking #{"b"}}}],
+                 #{"d" "a"}    [28 #{{:keys-found #{"c"}, :doors-blocking #{"b"}}}],
+                 #{"e" "c"}
+                 [14 #{{:keys-found #{"a" "b"}, :doors-blocking #{"a" "b" "c"}}}],
+                 #{:start "c"} [6 #{{:keys-found #{"a"}, :doors-blocking #{"b"}}}],
+                 #{"f" "c"}
+                 [20
+                  #{{:keys-found     #{"e" "a" "b"},
+                     :doors-blocking #{"d" "e" "a" "b" "c"}}}],
+                 #{"d" "e"}
+                 [38 #{{:keys-found #{"a" "b" "c"}, :doors-blocking #{"a" "b" "c"}}}],
+                 #{"d" "b"}
+                 [34 #{{:keys-found #{"a" "c"}, :doors-blocking #{"a" "b"}}}],
+                 #{"e" "b"}    [4 #{{:keys-found #{}, :doors-blocking #{"c"}}}],
+                 #{:start "a"} [2 #{{:keys-found #{}, :doors-blocking #{}}}],
+                 #{"a" "b"}    [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}],
+                 #{"f" "b"}
+                 [10 #{{:keys-found #{"e"}, :doors-blocking #{"d" "e" "c"}}}],
+                 #{:start "b"} [4 #{{:keys-found #{}, :doors-blocking #{"a"}}}],
+                 #{"e" :start}
+                 [8 #{{:keys-found #{"b"}, :doors-blocking #{"a" "c"}}}],
+                 #{"d" "f"}
+                 [44
+                  #{{:keys-found     #{"e" "a" "b" "c"},
+                     :doors-blocking #{"d" "e" "a" "b" "c"}}}],
+                 #{"b" "c"}    [10 #{{:keys-found #{"a"}, :doors-blocking #{"a" "b"}}}],
+                 #{"a" "c"}    [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}],
+                 #{"f" "e"}    [6 #{{:keys-found #{}, :doors-blocking #{"d" "e"}}}]}
+                (:routes (sut/find-key-routes state))))))
 
 (test/deftest solve-maze-2
   (test/is (= 86 (sut/solve (sut/read-maze sample-maze-2)))))
