@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-18-test
   (:require [advent-of-code-2019.day-18 :as sut]
-            [clojure.test :as test]))
+            [clojure.test :as test]
+            [clojure.repl :refer :all]))
 
 (def sample-maze-1
   "#########
@@ -39,6 +40,7 @@
                #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
                  [0 2] [2 0] [5 0] [6 2] [6 0] [1 2] [3 2] [0 1] [4 0]},
                :keys           {[1 1] "b", [7 1] "a"},
+               :key-index      {"b" [1 1], "a" [7 1]}
                :doors          {[3 1] "a"},
                :steps          0,
                :pos            [5 1],
@@ -64,6 +66,35 @@
                  :keys           {[1 1] "b", [7 1] "a"},
                  :keys-found     #{"q"}}
                 updated))))
+
+(test/deftest find-routes-1
+  (let [state (sut/initial-state-for-map (sut/read-maze sample-maze-1))]
+    (test/is (= {:routes         {:start {"a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]}},
+                 :doors          {[3 1] "a"},
+                 :steps          2,
+                 :doors-blocking #{},
+                 :pos            [6 1],
+                 :visited        #{[5 1] [6 1]},
+                 :walls
+                 #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
+                   [0 2] [2 0] [5 0] [6 2] [6 0] [1 2] [3 2] [0 1] [4 0]},
+                 :keys           {[1 1] "b", [7 1] "a"},
+                 :key-index      {"b" [1 1], "a" [7 1]}
+                 :keys-found     #{}}
+                (sut/find-route :start "a" state)))
+    (test/is (= {:routes   {"a" {"b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]}},
+                 :doors          {[3 1] "a"},
+                 :steps          6,
+                 :doors-blocking #{"a"},
+                 :pos            [2 1],
+                 :visited        #{[7 1] [4 1] [5 1] [6 1] [3 1] [2 1]},
+                 :walls
+                 #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
+                   [0 2] [2 0] [5 0] [6 2] [6 0] [1 2] [3 2] [0 1] [4 0]},
+                 :key-index      {"b" [1 1], "a" [7 1]},
+                 :keys           {[1 1] "b", [7 1] "a"},
+                 :keys-found     #{}}
+                (sut/find-route "a" "b" state)))))
 
 (test/deftest solve-maze-1
   (test/is (= 8 (sut/solve (sut/read-maze sample-maze-1)))))

@@ -116,12 +116,23 @@
           state)))
 
 (defn merge-routes
-  "Called when we have found two different routes from start to target
-  in different directions. Picks the best. If they are both the same
-  length, combines their sets of keys/doors sets."
+  "Called when we have found states representing two different routes
+  from start to target in different directions. Picks the best. If
+  they are both the same length, combines their sets of keys/doors
+  sets."
   [start target state-1 state-2]
-  ;; TODO: Implement!
-  )
+  (let [route-1 (current-route start target state-1)
+        steps-1 (:steps state-1)
+        route-2 (current-route start target state-2)
+        steps-2 (:steps state-2)]
+    (cond (< steps-2 steps-1)
+          state-2
+
+          (= steps-2 steps-1)
+          (update-in state-1 [:routes start target 1] clojure.set/union (second route-2))
+
+          :else
+          state-1)))
 
 (defn try-direction
   "Checks what lies in a particular direction from the current
@@ -130,11 +141,11 @@
   current state. Returns with an updated state reflecting the best
   outcome that can be obtained in that direction."
   [start target
-   {:keys         [walls doors steps keys-found doors-blocking visited routes]
-    {:keys [x y]} :pos
-    :as           state}
+   {:keys [walls doors steps keys-found doors-blocking visited routes]
+    [x y] :pos
+    :as   state}
    direction]
-  (println "trying" x y steps direction)
+  #_(println "trying" x y steps direction)
   (let [[x y]      (position-after-move x y direction)
         key-found  ((:keys state) [x y])
         door-found (doors [x y])]
@@ -146,10 +157,13 @@
       key-found
       (if (= key-found target)
         (add-route start target state) ; Found a route to the target, record it if best/equal and return.
-        (visit start target (assoc state :pos [x y] :keys-found (conj keys-found key-found))))  ; Keep looking.
+        (visit start target (assoc state :pos [x y] :keys-found (conj keys-found key-found)))) ; Keep looking.
+
+      (and door-found #(not (keys-found door-found))) ; Found a door that could block us.
+      (visit start target (assoc state :pos [x y] :doors-blocking (conj doors-blocking door-found)))
 
       :else
-      (visit start target (assoc state :pos [x y]) state))))  ; An ordinary move, continue solving from here.
+      (visit start target (assoc state :pos [x y])))))  ; An ordinary move, continue solving from here.
 
 (defn visit
   "Recursive shortest path maze solver, given the key we started at (or
@@ -162,11 +176,11 @@
   path with that number of steps.) No route will be added (and
   `:steps` will be `Long/MAX_VALUE`) if no path was found."
   [start target
-   {{:keys [x y]} :pos
-    :as           state}]
-  #_(println x y steps visited (visited [x y]))
+   {[x y] :pos
+    :as   state}]
+  (println start target x y)
   (reduce (partial merge-routes start target)
-          (map (partial try-direction
+          (map (partial try-direction start target
                        (-> state
                            (update :steps inc)
                            (update :visited conj [x y])))
@@ -176,8 +190,7 @@
   "Converts a maze map into the initial state needed by the solver.
   Removes the player entry, sets up the visited set, turns the walls
   entry into a simple set of coordinates, and builds an index from
-  door name to its coordinate so when the key is found the door can
-  easily be removed."
+  key name to its coordinate to make it easy to build the route map."
   [maze]
   (-> maze
       (dissoc :player)  ; This is just used to seed the solver, below.
@@ -185,14 +198,30 @@
               :pos            (first (keys (:player maze))) ; Tracks the location we have reached.
               :keys-found     #{}                           ; Keys that we have passed during this traversal.
               :doors-blocking #{}                           ; Doors we need other keys for before this path works.
+              :key-index      (clojure.set/map-invert (:keys maze))  ; Make it easy to search from them.
               :visited        #{}})  ; Keep track of places we have been.
       ;; This needs to move to the higher-level solver:
       #_(assoc :keys-found [])  ; Keep track of the keys we have found along this path, in order.
       (update :walls (fn [m] (set (keys m))))))  ; All we need is the set of coordinates.
 
+(defn find-route
+  "Finds the best route from either the start position or a key to
+  another key, counting the steps, noting any other keys that can be
+  picked up along the way, and any doors that must be unlocked before
+  the path can be followed. If there is more than one route with the
+  same minimum steps, reports all the distinct sets of keys/doors
+  along each of them. `start` can either be `:start` (to mean the maze
+  starting point) or the name of a key; `target` is always the name of
+  a key."
+  [start target maze]
+  (visit start target (cond-> maze
+                        (not= :start start)
+                        (assoc :pos (get-in maze [:key-index start])))))
+
 (defn solve
   "Sets up the state given the map that was read, and runs the solvers."
   [maze]
+  ;; TODO: Change to set up key routes and run a depth first search based on them.
   (let [state (visit :start "a" (initial-state-for-map maze))
         steps (:steps state)]
     (if (= steps Long/MAX_VALUE)
