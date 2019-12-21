@@ -7,6 +7,8 @@
                  [org.clojure/math.combinatorics "0.1.6"]
                  [org.clojure/core.async "0.6.532"]
                  [clojure-lanterna "0.9.4"]
+                 [jline/jline "2.14.2"]
                  [com.taoensso/timbre "4.10.0"]]
+  :main advent-of-code-2019.day-21
   :repl-options {:init-ns advent-of-code-2019.core}
   :jvm-opts [#_"-Xmx30g" "-Xss512m"])
