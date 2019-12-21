@@ -216,7 +216,7 @@
                       {:goal end}))]
    (:steps (visit-flat state))))
 
-(defn build-portal-routes
+(defn build-portal-network
   "Calculates the best paths (if any exist) between each pair of
   portals, as well as between the start and inward portals, and each
   portal outward portal and the exit."
@@ -236,13 +236,80 @@
                               (let [portal-points (first (filter (fn [points] (points start-entrance))
                                                                  portal-point-sets))]
                                 (when (not (portal-points end-entrance))
-                                  [start-entrance end-entrance]))))
+                                  [start-exit end-entrance]))))
                     (for [[end-entrance _] (:inward-portals maze)]
                       [:start end-entrance])
                     (for [[_ start-exit] (:outward-portals maze)]
-                      (do
-                        (println start-exit)
-                        [start-exit :exit]))))))
+                      [start-exit :exit])))))
+
+(declare visit-portals)
+
+(defn try-portal
+  "Checks the best result we can obtain when we try to go through a
+  particular portal entrance."
+  [{:keys [pos steps visited portals outward-portals routes start goal]
+    :as   state}
+   entrance
+   best-so-far]
+  #_(println "try-portal" pos entrance steps (:steps best-so-far) (:level state) visited)
+  (let [exit     (portals entrance)
+        from     (if (= pos start) :start pos)         ; Handle the special cases of the maze start
+        to       (if (= entrance goal) :exit entrance) ; and exit.
+        distance (routes [from to])
+        steps    (+ steps (or distance 0))]
+    ;; I thought we would have a problematic loop if we ever revisited the same portal, but that stops actual
+    ;; valid solutions from being found, so I need to find better logic for this. Same portal at same level maybe?
+    ;; Actually, I probably have to switch to a breadth-first-search.
+    (if (and distance #_(not (visited entrance))  ; We can get to this portal and have not yet used it.
+             (< steps 10000)  ; Haven't reached distance limit, TODO fix when using breadth-first search
+             (< steps (:steps best-so-far))) ; And it won't take more steps than current best solution.
+      (visit-portals (-> state
+                         (update :visited conj entrance)
+                         (update :steps + distance)
+                         (update :level + (if (outward-portals entrance) -1 1))
+                         (assoc :pos exit))
+                     best-so-far)
+      (assoc state :steps Long/MAX_VALUE))))  ; Indicate that this way does not lead to a better solution.
+
+(def no-solution
+  "A vestigial state map that indicates no solution has been found,
+  useful for a base case when updating solutions with best-solution."
+  {:steps Long/MAX_VALUE})
+
+(defn portals-available
+  "Returns a list of the coordinates of the entrances to portals that
+  can be used on the current level, making sure we try the outer ones
+  first to avoid infinite regress."
+  [{:keys [inward-portals outward-portals level]}]
+  (concat (when (pos? level) (keys outward-portals)) (keys inward-portals)))
+
+(defn visit-portals
+  "Recursive shortest path maze solver working at the level of portal
+  entrances and exits, and managing the rules of the levels on which
+  the portals and exit are available. Takes the starting state from
+  which to attempt a solution, and the best solution that has been
+  found so far, to help short-circuit pointless paths."
+  [{:keys [pos steps level]
+    :as   state}
+   best-so-far]
+  (println "visit-portals" pos steps level)
+  (let [exit-attempt (if (zero? level) (visit-flat state) no-solution)]
+    (loop [best-so-far (best-result best-so-far exit-attempt)
+           remaining   (portals-available state)]
+      (if-let [portal (first remaining)]
+        (recur (best-result best-so-far (try-portal state portal best-so-far))
+               (rest remaining))
+        best-so-far))))
+
+(defn solve-2
+  [maze]
+  (let [state (visit-portals (merge maze {:routes (build-portal-network maze)
+                                          :pos    (:start maze)})
+                             no-solution)
+        steps (:steps state)]
+    (if (= steps Long/MAX_VALUE)
+      :failed
+      steps)))
 
 (def part-1-maze
   "The maze for part 1 of the problem."
@@ -368,3 +435,7 @@ ER..#.....#...........#.#...#                                                   
   "Solve part 1."
   []
   (solve (read-maze part-1-maze)))
+
+(defn part-2
+  []
+  (solve-2 (read-maze-2 part-1-maze)))
