@@ -149,7 +149,8 @@
   the state to support the additional rules stipulated in part 2.
   Separates the portals into descending and ascending, adds a
   current-level value, and a set of descending portals that have been
-  visited."
+  visited. Removes entries that are not needed by the iterative
+  breadth-first solver."
   [maze-text]
   (let [maze             (read-maze maze-text)
         maze-lines       (clojure.string/split-lines maze-text)
@@ -165,10 +166,9 @@
                            (and (indexed? entrance)
                                 (not (or (outward-portal-x (first entrance))
                                          (outward-portal-y (second entrance))))))]
-    (merge maze
+    (merge (dissoc maze :visited :steps)
            {:outward-portals (into {} (filter outward-portal? (:portals maze)))
-            :inward-portals  (into {} (filter inward-portal? (:portals maze)))
-            :level           0})))
+            :inward-portals  (into {} (filter inward-portal? (:portals maze)))})))
 
 (declare visit-flat)
 
@@ -199,21 +199,21 @@
   (reduce best-result
           (map (partial try-direction-flat
                         (-> state
-                            (update :steps inc)
-                            (update :visited conj [x y])))
+                            (update :steps (fnil inc 0))
+                            (update :visited (fnil conj #{}) [x y])))
                [:north :south :east :west])))
 
 (defn flat-distance
- "Finds the number of steps in the best path, without using portals,
- between the specified points in the maze, which may also be `:start`
- to mean the starting point, and `:exit` to mean the goal at level 0."
- [map start end]
- (let [state (merge map
-                    {:pos (if (= start :start)
-                            (:start map)
-                            (traverse-portals map start))}
-                    (when (not= end :exit)
-                      {:goal end}))]
+  "Finds the number of steps in the best path, without using portals,
+  between the specified points in the maze, which may also be `:start`
+  to mean the starting point, and `:exit` to mean the goal at level 0."
+  [map start end]
+  (let [state (merge map
+                     {:pos     (if (= start :start)
+                                 (:start map)
+                                 (traverse-portals map start))}
+                     (when (not= end :exit)
+                       {:goal end}))]
    (:steps (visit-flat state))))
 
 (defn build-portal-network
@@ -245,71 +245,66 @@
 (declare visit-portals)
 
 (defn try-portal
-  "Checks the best result we can obtain when we try to go through a
-  particular portal entrance."
-  [{:keys [pos steps visited portals outward-portals routes start goal]
+  "Checks if we can reach the specified portal entrance, and if so
+  returns a new work queue entry representing continuing from its
+  exit."
+  [{:keys [portals outward-portals routes start goal]
     :as   state}
-   entrance
-   best-so-far]
-  #_(println "try-portal" pos entrance steps (:steps best-so-far) (:level state) visited)
+   steps pos level entrance]
+  #_(println "try-portal" pos entrance steps level)
   (let [exit     (portals entrance)
         from     (if (= pos start) :start pos)         ; Handle the special cases of the maze start
         to       (if (= entrance goal) :exit entrance) ; and exit.
-        distance (routes [from to])
-        steps    (+ steps (or distance 0))]
-    ;; I thought we would have a problematic loop if we ever revisited the same portal, but that stops actual
-    ;; valid solutions from being found, so I need to find better logic for this. Same portal at same level maybe?
-    ;; Actually, I probably have to switch to a breadth-first-search.
-    (if (and distance #_(not (visited entrance))  ; We can get to this portal and have not yet used it.
-             (< steps 10000)  ; Haven't reached distance limit, TODO fix when using breadth-first search
-             (< steps (:steps best-so-far))) ; And it won't take more steps than current best solution.
-      (visit-portals (-> state
-                         (update :visited conj entrance)
-                         (update :steps + distance)
-                         (update :level + (if (outward-portals entrance) -1 1))
-                         (assoc :pos exit))
-                     best-so-far)
-      (assoc state :steps Long/MAX_VALUE))))  ; Indicate that this way does not lead to a better solution.
-
-(def no-solution
-  "A vestigial state map that indicates no solution has been found,
-  useful for a base case when updating solutions with best-solution."
-  {:steps Long/MAX_VALUE})
+        distance (routes [from to])]
+    (when distance  ; We can get to this portal
+      (let [[x y] exit]
+        [(+ steps distance) (+ level (if (outward-portals entrance) -1 1)) x y]))))
 
 (defn portals-available
   "Returns a list of the coordinates of the entrances to portals that
-  can be used on the current level, making sure we try the outer ones
-  first to avoid infinite regress."
-  [{:keys [inward-portals outward-portals level]}]
+  can be used in the current context the current level"
+  [{:keys [inward-portals outward-portals]} level]
   (concat (when (pos? level) (keys outward-portals)) (keys inward-portals)))
 
+(defn build-exit-task-if-reachable
+  "If we are currently at level 0 and in a position that has a path to
+  the exit, return an entry for the work queue that will represent
+  arrival at the exit."
+  [maze steps level x y]
+  (let [solution (when (zero? level) (visit-flat (assoc maze :pos [x y])))]
+    (when (and solution (< (:steps solution) Long/MAX_VALUE))
+      (let [[x y] (:goal maze)]
+        [(+ steps (:steps solution)) level x y]))))
+
+(def max-steps
+  "The largest number of steps we are willing to search."
+  10000)
+
 (defn visit-portals
-  "Recursive shortest path maze solver working at the level of portal
+  "Iterative breadth-first maze solver working at the level of portal
   entrances and exits, and managing the rules of the levels on which
-  the portals and exit are available. Takes the starting state from
-  which to attempt a solution, and the best solution that has been
-  found so far, to help short-circuit pointless paths."
-  [{:keys [pos steps level]
-    :as   state}
-   best-so-far]
-  (println "visit-portals" pos steps level)
-  (let [exit-attempt (if (zero? level) (visit-flat state) no-solution)]
-    (loop [best-so-far (best-result best-so-far exit-attempt)
-           remaining   (portals-available state)]
-      (if-let [portal (first remaining)]
-        (recur (best-result best-so-far (try-portal state portal best-so-far))
-               (rest remaining))
-        best-so-far))))
+  the portals and exit are available."
+  [maze]
+  (let [[x y] (:start maze)]
+    (loop [work-queue (sorted-set [0 0 x y])]
+      (when-let [current (first work-queue)]
+        #_(println "work:" current (count work-queue) #_work-queue)
+        (let [[steps level x y] current]
+          (if (> steps max-steps)
+            (println "Abandoning search at" steps "steps")
+            (if (= [x y] (:goal maze))
+              steps  ; We found the best answer! Return it.
+              ;; Replace our current work element with all the places we can get to from here, sorted into
+              ;; their distance from the start.
+              (let [new-options (filter identity (concat (map (partial try-portal maze steps [x y] level)
+                                                              (portals-available maze level))
+                                                         ;; Include the exit if we can walk out it.
+                                                         [(build-exit-task-if-reachable maze steps level x y)]))]
+                (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options)))))))))))
 
 (defn solve-2
   [maze]
-  (let [state (visit-portals (merge maze {:routes (build-portal-network maze)
-                                          :pos    (:start maze)})
-                             no-solution)
-        steps (:steps state)]
-    (if (= steps Long/MAX_VALUE)
-      :failed
-      steps)))
+  (visit-portals (assoc maze :routes (build-portal-network maze))))
 
 (def part-1-maze
   "The maze for part 1 of the problem."

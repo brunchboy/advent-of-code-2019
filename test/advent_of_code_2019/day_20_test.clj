@@ -114,11 +114,8 @@ YN......#               VT..#....QG
                 [7 10]  [2 13],
                 "DE"    [[[7 10] [6 10]] [[1 13] [2 13]]],
                 [9 7]   [2 8]},
-               :steps           0,
                :start           [9 2],
                :goal            [13 16],
-               :visited         #{},
-               :level           0,
                :outward-portals {[1 15] [11 12], [1 13] [6 10], [1 8] [9 6]},
                :inward-portals  {[11 11] [2 15], [7 10] [2 13], [9 7] [2 8]}}
               (sut/read-maze-2 sample-maze-1))))
@@ -177,11 +174,16 @@ YN......#               VT..#....QG
                [[32 17] [25 17]]     11}
               (sut/build-portal-network (sut/read-maze-2 sample-maze-2)))))
 
+(test/deftest portals-available
+  (test/is (= [[11 11] [7 10] [9 7]] (sut/portals-available (sut/read-maze-2 sample-maze-1) 0)))
+  (test/is (= [[1 15] [1 13] [1 8] [11 11] [7 10] [9 7]] (sut/portals-available (sut/read-maze-2 sample-maze-1) 1))))
+
 (test/deftest solve-part-2-maze-1
   (test/is (= 26 (sut/solve-2 (sut/read-maze-2 sample-maze-1)))))
 
-(test/deftest solve-part-2-maze-2
-  (test/is (= :failed (sut/solve-2 (sut/read-maze-2 sample-maze-2)))))
+;; Commented out because it takes a long time to pass with max-steps at 10,000.
+#_(test/deftest solve-part-2-maze-2
+  (test/is (= nil (sut/solve-2 (sut/read-maze-2 sample-maze-2)))))
 
 (def sample-maze-3
   "             Z L X W       C
@@ -224,3 +226,6 @@ RE....#.#                           #......RF
 
 (test/deftest solve-part-2-maze-3
   (test/is (= 396 (sut/solve-2 (sut/read-maze-2 sample-maze-3)))))
+
+(test/deftest part-2
+  (test/is (= 5754 (sut/part-2))))
