@@ -178,7 +178,7 @@
   [start target
    {[x y] :pos
     :as   state}]
-  (println start target x y)
+  #_(println start target x y)
   (reduce (partial merge-routes start target)
           (map (partial try-direction start target
                        (-> state
@@ -189,13 +189,12 @@
 (defn initial-state-for-map
   "Converts a maze map into the initial state needed by the solver.
   Removes the player entry, sets up the visited set, turns the walls
-  entry into a simple set of coordinates, and builds an index from
-  key name to its coordinate to make it easy to build the route map."
+  entry into a simple set of coordinates, and builds an index from key
+  name to its coordinate to make it easy to build the route map."
   [maze]
   (-> maze
-      (dissoc :player)  ; This is just used to seed the solver, below.
       (merge {:steps          0                             ; Counts steps as we explore the maze.
-              :pos            (first (keys (:player maze))) ; Tracks the location we have reached.
+              :pos             (first (keys (:player maze))) ; Tracks the location we have reached.
               :keys-found     #{}                           ; Keys that we have passed during this traversal.
               :doors-blocking #{}                           ; Doors we need other keys for before this path works.
               :key-index      (clojure.set/map-invert (:keys maze))  ; Make it easy to search from them.
@@ -203,6 +202,16 @@
       ;; This needs to move to the higher-level solver:
       #_(assoc :keys-found [])  ; Keep track of the keys we have found along this path, in order.
       (update :walls (fn [m] (set (keys m))))))  ; All we need is the set of coordinates.
+
+(defn search-from
+  "Sets up a search from the specified key location"
+  [start state]
+  (let [starting-pos (if (= :start start) (first (keys (:player state))) (get-in state [:key-index start]))]
+    (merge state {:pos            starting-pos ; Start from the specified key location.
+                  :steps          0            ; This is a new search, start over at zero.
+                  :visited        #{}          ; And we haven't walked anywhere yet this time.
+                  :keys-found     #{}          ; Keys that we have passed during this traversal.
+                  :doors-blocking #{}})))      ; Doors we need other keys for before this path works.
 
 (defn find-route
   "Finds the best route from either the start position or a key to
@@ -212,11 +221,10 @@
   same minimum steps, reports all the distinct sets of keys/doors
   along each of them. `start` can either be `:start` (to mean the maze
   starting point) or the name of a key; `target` is always the name of
-  a key."
-  [start target maze]
-  (visit start target (cond-> maze
-                        (not= :start start)
-                        (assoc :pos (get-in maze [:key-index start])))))
+  a key. Resets the steps visited, keys-found and doors-blocking
+  accumulators since this is a new search."
+  [start target state]
+  (visit start target (search-from start state)))
 
 (defn solve
   "Sets up the state given the map that was read, and runs the solvers."
