@@ -77,10 +77,10 @@
    :doors-blocking #{"b"}      ; The doors we need keys for before this path works.
    :visited        #{[5 1]}    ; Cells that have already been visited.
    ;; The purpose of the first, maze-walking phase is to build up the following information.
-   :routes         {#{:start "a"}                     ; Records the steps of each best path from the start to a key,
+   :routes         {#{"@" "a"}                     ; Records the steps of each best path from the start to a key,
                     [1234 #{{:doors-blocking #{"b"} ; and the obstacles and keys found along it.
                              :keys-found     #{}}}] ; There may be multiple doors/keys alternatives.
-                    #{:start "b"}                   ; And another route from the start to a key...
+                    #{"@" "b"}                   ; And another route from the start to a key...
                     [567 #{{:doors-blocking #{}}}]
                     #{"a" "b"}                      ; Best route from one key to another in either direction.
                     [312 #{{:doors-blocking #{}
@@ -138,10 +138,10 @@
 
 (defn try-direction
   "Checks what lies in a particular direction from the current
-  coordinates, given the key we started at (or `:start` if it is the
-  maze starting position), the key we are trying to find and the
-  current state. Returns with an updated state reflecting the best
-  outcome that can be obtained in that direction."
+  coordinates, given the key we started at (or `@` if it is the maze
+  starting position), the key we are trying to find and the current
+  state. Returns with an updated state reflecting the best outcome
+  that can be obtained in that direction."
   [start target
    {:keys [walls doors steps keys-found doors-blocking visited routes]
     [x y] :pos
@@ -169,8 +169,8 @@
 
 (defn visit
   "Recursive shortest path maze solver, given the key we started at (or
-  `:start` if it is the maze starting position), the key we are trying
-  to find, and the current state. Returns a state whose routes reflect
+  `@` if it is the maze starting position), the key we are trying to
+  find, and the current state. Returns a state whose routes reflect
   the smallest number of steps between those points, along with the
   sets of keys found along the way, and doors for which other keys are
   needed before they can be traversed. (There may be multiple
@@ -210,12 +210,18 @@
   visited, keys-found and doors-blocking accumulators since this is a
   new search."
   [start state]
-  (let [starting-pos (if (= :start start) (first (keys (:player state))) (get-in state [:key-index start]))]
+  (let [starting-pos (if (= "@" start) (first (keys (:player state))) (get-in state [:key-index start]))]
     (merge state {:pos            starting-pos ; Start from the specified key location.
                   :steps          0            ; This is a new search, start over at zero.
                   :visited        #{}          ; And we haven't walked anywhere yet this time.
                   :keys-found     #{}          ; Keys that we have passed during this traversal.
                   :doors-blocking #{}})))      ; Doors we need other keys for before this path works.
+
+(defn other-key
+  "Given a key pair set and one of the keys it contains, returns the
+  other."
+  [pair k]
+  (first (disj pair k)))
 
 (defn find-route
   "Finds the best route from either the start position or a key to
@@ -227,11 +233,11 @@
   key (the order does not matter because the route returns the same
   values in either direction, but for calling `visit` in the special
   case where we want to start at the start of the maze, one of the
-  elements will be `:start` and that will need to be the first
-  argument to `visit`."
+  elements will be `@` and that will need to be the first argument to
+  `visit`."
   [pair state]
-  (let [[start target] (if (pair :start)
-                         [:start (first (disj pair :start))]
+  (let [[start target] (if (pair "@")
+                         ["@" (other-key pair "@")]
                          (vec pair))]
     (visit start target (search-from start state))))
 
@@ -246,13 +252,38 @@
                 with-new-route
                 state)))
           maze
-          (map set (combo/combinations (conj (keys (:key-index maze)) :start) 2))))
+          (map set (combo/combinations (conj (keys (:key-index maze)) "@") 2))))
+
+(defn can-reach-key
+  "Given a set of key route path annotations (which include the doors
+  blocking each path), and the keys which have not yet been found,
+  returns an indication of whether the key can currently be reached."
+  [path-set keys-left]
+  (some (fn [{:keys [doors-blocking]}]
+          (empty? (clojure.set/intersection keys-left doors-blocking)))
+        path-set))
+
+(defn accessible-keys
+  "Returns all the keys we can get to from our current position without
+  opening any new doors. Returns tuples containing the key that can be
+  reached and the route (steps required, additional keys encountered,
+  and doors in the way, for which we must already have keys)."
+  [state keys-left pos]
+  (filter (fn [[k]]  ; Ignore the "route" back to the starting point.
+            (not= "@" k))
+          (map (fn [[pair route]]
+                 [(other-key pair pos) route])
+               (filter (fn [[pair [_ path-set]]]
+                         (when (and (pair pos)
+                                    (can-reach-key path-set keys-left))
+                           (first (disj pair pos))))
+                       (:routes state)))))
 
 (defn solve
   "Sets up the state given the map that was read, and runs the solvers."
   [maze]
   ;; TODO: Change to set up key routes and run a depth first search based on them.
-  (let [state (visit :start "a" (initial-state-for-map maze))
+  (let [state (visit "@" "a" (initial-state-for-map maze))
         steps (:steps state)]
     (if (= steps Long/MAX_VALUE)
       :failed

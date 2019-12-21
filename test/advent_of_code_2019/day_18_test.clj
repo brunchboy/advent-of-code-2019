@@ -107,6 +107,12 @@
                  "a" {"b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]}}
                 (:routes (sut/find-key-routes state))))))
 
+(test/deftest available-keys-1
+  (let [state     (sut/find-key-routes (sut/initial-state-for-map (sut/read-maze sample-maze-1)))
+        keys-left (set (keys (:key-index state)))]
+    (test/is (= [["a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]]]
+                (sut/accessible-keys state keys-left "@")))))
+
 (test/deftest solve-maze-1
   (test/is (= 8 (sut/solve (sut/read-maze sample-maze-1)))))
 
@@ -211,6 +217,18 @@
                  #{"a" "c"}    [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}],
                  #{"f" "e"}    [6 #{{:keys-found #{}, :doors-blocking #{"d" "e"}}}]}
                 (:routes (sut/find-key-routes state))))))
+
+(test/deftest available-keys-2
+  (let [state     (sut/find-key-routes (sut/initial-state-for-map (sut/read-maze sample-maze-2)))
+        keys-left (set (keys (:key-index state)))]
+    (test/is (= [["a" [2 #{{:keys-found #{}, :doors-blocking #{}}}]]]
+                (sut/accessible-keys state keys-left "@")))
+    (test/is (= [["b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]]]
+                (sut/accessible-keys state (disj keys-left "a") "a")))
+    (test/is (= [["d" [28 #{{:keys-found #{"c"}, :doors-blocking #{"b"}}}]]
+                 ["b" [6 #{{:keys-found #{}, :doors-blocking #{"a"}}}]]
+                 ["c" [4 #{{:keys-found #{}, :doors-blocking #{"b"}}}]]]
+                (sut/accessible-keys state (disj keys-left "a" "b") "a")))))
 
 (test/deftest solve-maze-2
   (test/is (= 86 (sut/solve (sut/read-maze sample-maze-2)))))
