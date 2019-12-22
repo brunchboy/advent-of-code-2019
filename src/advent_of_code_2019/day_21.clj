@@ -46,3 +46,15 @@
 ;; OR T J
 ;; AND D J
 ;; WALK
+
+;; Coming up with part 2 was more of a pain. I finally settled on this
+;; reasoning, which worked for the hull I had:
+;; OR A T
+;; AND B T
+;; AND C T
+;; NOT T T  -- T = (¬A v ¬B v ¬C), there is a hole in one of the next three steps.
+;; OR E J
+;; OR H J   -- J = (E v H), jump if you can walk or jump again right away...
+;; AND T J  -- J = (E v H) ^ (¬A v ¬B v ¬C), but only if there is a hole coming up...
+;; AND D J  -- J = (E v H) ^ (¬A v ¬B v ¬C) ^ D, and if you are not jumping into a hole.
+;; RUN
