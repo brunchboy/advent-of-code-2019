@@ -150,4 +150,4 @@ deal into new stack")
 
 (defn part-1
   []
-  (nth (shuffle-deck factory-deck part-1-instructions) 2019))
+  (.indexOf (shuffle-deck factory-deck part-1-instructions) 2019))
