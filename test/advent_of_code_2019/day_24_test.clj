@@ -20,7 +20,7 @@
   "We get the proper results when asking about bugs at coordinates."
   (let [eris (sut/read-map sample-map)]
     (test/is (= [[0 3] [1 4]]
-                (filter (fn [[x y]] (sut/bug-present eris [x y]))
+                (filter (fn [[x y]] (sut/bug-present? eris [x y]))
                         (for [x (range 5)
                               y (range 5)]
                           [x y]))))))
@@ -84,3 +84,25 @@
 (test/deftest part-1
   "Check solution of part 1."
   (test/is (= 32573535 (sut/part-1))))
+
+(test/deftest count-bugs-in-grid
+  "Check bug counting on single grid."
+  (test/is (= 2 (sut/count-bugs-in-grid (sut/read-map sample-map))))
+  (test/is (= 8 (sut/count-bugs-in-grid (sut/read-map initial-state)))))
+
+(test/deftest count-bugs
+  "Check bug counting on multi-level map."
+  (test/is (= 12
+              (sut/count-bugs {:levels {-1 (sut/read-map sample-map)
+                                        0  (sut/read-map initial-state)
+                                        1  (sut/read-map sample-map)}}))))
+
+(test/deftest recursive-sample
+  "Make sure we get the same result as the example solution for part
+  2."
+  (let [eris (sut/augment-map (sut/read-map initial-state))]
+    (test/is (= 99 (sut/count-bugs (nth (iterate sut/generation-2 eris) 10))))))
+
+(test/deftest part-2
+  "Check the result for part 2."
+  (test/is (= 1951 (sut/part-2))))
