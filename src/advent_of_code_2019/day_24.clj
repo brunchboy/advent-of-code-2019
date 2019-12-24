@@ -59,3 +59,21 @@
   (reduce + (for [x (range 5)
                   y (range 5)]
               (fate eris [x y]))))
+
+(def part-1-map
+  "The state of Eris in the setup of Part 1."
+  "..#.#
+#.##.
+.#..#
+#....
+....#")
+
+(defn part-1
+  "Solve part 1."
+  []
+  (loop [seen  #{}
+         eris (read-map part-1-map)]
+    (if (seen eris)
+      eris
+      (recur (conj seen eris)
+             (generation eris)))))

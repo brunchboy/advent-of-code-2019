@@ -80,3 +80,7 @@
 .....
 ##...")
                 (nth (iterate sut/generation eris) 4)))))
+
+(test/deftest part-1
+  "Check solution of part 1."
+  (test/is (= 32573535 (sut/part-1))))
