@@ -190,9 +190,9 @@
 
 (defn initial-state-for-map
   "Converts a maze map into the initial state needed by the solver.
-  Removes the player entry, sets up the visited set, turns the walls
-  entry into a simple set of coordinates, and builds an index from key
-  name to its coordinate to make it easy to build the route map."
+  Sets up the visited set, turns the walls entry into a simple set of
+  coordinates, and builds an index from key name to its coordinate to
+  make it easy to build the route map."
   [maze]
   (-> maze
       (merge {:steps          0                             ; Counts steps as we explore the maze.
@@ -206,9 +206,11 @@
 (defn search-from
   "Sets up a search from the specified key location. Resets the steps
   visited, keys-found and doors-blocking accumulators since this is a
-  new search."
-  [start state]
-  (let [starting-pos (if (= "@" start) (first (keys (:player state))) (get-in state [:key-index start]))]
+  new search. `player-started` holds the coordinates at which the
+  player started in this maze so that `@` can be translated
+  appropriately."
+  [player-started start state]
+  (let [starting-pos (if (= "@" start) player-started (get-in state [:key-index start]))]
     (merge state {:pos            starting-pos ; Start from the specified key location.
                   :steps          0            ; This is a new search, start over at zero.
                   :visited        #{}          ; And we haven't walked anywhere yet this time.
@@ -227,25 +229,27 @@
   picked up along the way, and any doors that must be unlocked before
   the path can be followed. If there is more than one route with the
   same minimum steps, reports all the distinct sets of keys/doors
-  along each of them. `pair` is a set of start location and target
-  key (the order does not matter because the route returns the same
-  values in either direction, but for calling `visit` in the special
-  case where we want to start at the start of the maze, one of the
-  elements will be `@` and that will need to be the first argument to
-  `visit`."
-  [pair state]
+  along each of them. `player-started` is the starting coordinates of
+  the player/robot in this maze. `pair` is a set of start location and
+  target key (the order does not matter because the route returns the
+  same values in either direction, but for calling `visit` in the
+  special case where we want to start at the start of the maze, one of
+  the elements will be `@` and that will need to be the first argument
+  to `visit`."
+  [player-started pair state]
   (let [[start target] (if (pair "@")
                          ["@" (other-key pair "@")]
                          (vec pair))]
-    (visit start target (search-from start state))))
+    (visit start target (search-from player-started start state))))
 
 (defn find-key-routes
-  "Accumulates all the best paths from the start to each key, and from
-  each key to each other key, with notes about the doors blocking
-  each, and extra keys found along the way."
-  [maze]
+  "Accumulates all the best paths from the start (the coordinate
+  provided in `player-started`) to each key, and from each key to each
+  other key, with notes about the doors blocking each, and extra keys
+  found along the way."
+  [player-started maze]
   (reduce (fn [state pair]
-            (let [with-new-route (find-route pair state)]
+            (let [with-new-route (find-route player-started pair state)]
               (if (< (:steps with-new-route) Long/MAX_VALUE)  ; Only include working routes.
                 with-new-route
                 state)))
@@ -286,8 +290,9 @@
   and between keys."
   [maze]
   (println "Finding routes between keys...")
-  (let [maze        (find-key-routes (initial-state-for-map maze))
-        best-so-far (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
+  (let [player-started (first (keys (:player maze)))
+        maze           (find-key-routes player-started (initial-state-for-map maze))
+        best-so-far    (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
     (println (count (:routes maze)) "routes found. Solving for best collection order...")
     (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) "@" []])]
       (when-let [current (first work-queue)]
@@ -404,3 +409,104 @@
   "Solve part 1."
   []
   (solve (read-maze part-1-maze)))
+
+;; Part 2
+
+(defn initial-state-for-map-2
+  "Converts a maze map into the initial state needed by the multi-robot solver.
+  Sets up the visited set, turns the walls entry into a simple set of
+  coordinates, and builds an index from key name to its coordinate to
+  make it easy to build the route map. Pos will be set to the starting
+  point of each robot when finding paths from start to keys."
+  [maze]
+  (-> maze
+      (merge {:steps          0                             ; Counts steps as we explore the maze.
+              :keys-found     []                            ; Keys we have passed during this traversal, in order.
+              :doors-blocking #{}                           ; Doors we need other keys for before this path works.
+              :key-index      (clojure.set/map-invert (:keys maze))  ; Make it easy to search from them.
+              :visited        #{}})  ; Keep track of places we have been.
+      (update :walls (fn [m] (set (keys m))))))
+
+(def part-2-maze
+  "The maze for part 2 of the problem."
+  "#################################################################################
+#...#.......#....a..#...........#..e....#.....#...#...#...........#.............#
+#.#.#.#####.#.#####.#.#######.###.###.#.#.###.#.#.###.#.#########.#.###.#######.#
+#.#.#.#.#...#.#.K...#...#...#.....#.#.#.#.#.....#.#...#t......#...#.#...#.......#
+#.###B#.#.#.#.#.#######.###.#######.#.###.#######.#.#########.#.#####.###.#######
+#.#q..#.#.#.#.#...#.....#...#.......#...#...#.#...#.........#.#.......#.#.#.....#
+#.#.###.#.#.#.###.#.#####.#.#.#####.###.###.#.#.#####.#######.#########.#.###.#.#
+#...#...#.#.#...#.#.......#...#.....#...#...#.........#.....#.......#.#...#m..#.#
+#.#####.#.#####.#.#######.#########.#.###F#############.###.###.###.#.#.###.#####
+#...#...#.......#.......#.#......h#.#...#.#.....#.......#.....#.#...#.#.#.......#
+###.#.###########.#####.#.#.#####.#####.#.#.###.#.#####.#####.#.#.###G#.###.###.#
+#.#.#.......#...#...#...#.#...J.#.#.....#.#...#.#.....#.#...#.#.#.#...#...#...#.#
+#.#.#####.###.#.###.#####.#####.#.#.###.#.###.#.#####.#.#.#.#.###.#.#.###.#####S#
+#w#...#...#...#...#...#...#...#.#...#...#.#...#.....#.#.#.#.#.....#.#...#.......#
+#.###.#.###.#####.###.#.#####.#.#####.###.#.###.###.#.###.#.#######.###.#######.#
+#...#...#...#.....#...#.#...#.#...#.#.#.#.#.#.#.#...#.....#...#...#.#.#.........#
+#.#####.#.###.#####.###.#.#.#.###.#.#.#.#.#.#.#.###.#########.#.#.#.#.###########
+#.......#...#.....#.#.....#...#.#.#...#.#...#.#...#.....#...#.#.#.#.....#.......#
+#C#########.#####.#.#.#######.#.#.###.#.#.###.###.#####.#.###.#.#######.###.###.#
+#.#.......#.#.#...#...#...#.....#...#...#.......#.#.....#.#...#.....#.#...#...#.#
+#.###.#.#.#.#.#.###.###.#.#########.###.#####.###.#.#####.#.#####.#.#.###.###.###
+#...#.#.#.#.#.#.#y..#...#...#.....#.#...#.....#...#.#.....#...#...#.....#...#...#
+###.###.#I#.#.#.###########.#.###.#.#####.#####.###.#.###.#####.###########.#.#.#
+#...#...#.#.#.#...........#...#...#.#...#...#...#.#...#...#.....#.........#.#.#.#
+#.###.###.#.#.#####.###########.###.#.#.#####.###.#.#####.###.###.#######.#.###.#
+#.....#...#...#...#.............#.....#.#.....#...#.#...#.....#...#.....#...#...#
+#####.#######.#.#.###############.#####.#.#######.#.#.#.#####.#.###.###.#####.###
+#.....#.....#...#.#...#.............#...#.......#...#.#.#.....#.#.#.#.#.........#
+#.#####.###.#####.#.###.###########.#.###.#####.#####.#.#######.#.#.#.#########.#
+#...#.#.#.#.......#...........#...#.#...#.....#.......#...#.....#...#.....#...#.#
+###.#.#.#.###############.#####.#.#.###.#####.###########.#.#######.###.###.#.#.#
+#...#.#...#.......#.....#.#.....#.#...#.#.....#...#.....#...#.....#.#...#...#...#
+#.###.###.#.#####.#.###.###.#####.#####.#.#####.###.###.#####.###.#.#.###.#####.#
+#.#.....#.#...#.....#...#...#.....#.....#...#.......#...#.....#.#.#...#...#.....#
+#.###L#.#.#.#.#######.###.###.#####.###.###.#.#######.#.###.###.#.###.#.###.#####
+#o..#.#.#.#.#.....#.#.#...#.#...#...#.#.#.#.#.....#...#.....#.#...#...#.#.......#
+###.###.#.#######.#.#.#.#.#.###.#.###.#.#.#.#######.#########.#.#######.#######.#
+#.#...#.#.......#.#.#.#.#.#.#...#.#...#.#.#.#...#...#.........#.#.....#.......#.#
+#.###.#.#######.#.#.#.###.#.#.###.#.###.#.#.#.#.#.###.#######.#.#.###.#######.#.#
+#.............#...#.......#.......#....@#@....#...#.........#.....#...........#.#
+#################################################################################
+#.....#.....#.#.........#.#...#.....#..@#@......#..u........#...#.......#.....Q.#
+#.#.###.#.#.#.#.#######.#.#.#.#.#.###.#.#.#.###.#.#########.###.#.#.###.#######.#
+#.#.#...#.#.#.#.....#...#.R.#.#.#.....#.#.#...#...#.......#r....#.#...#.........#
+#.#.#.###.#.#.#####.###.#####.#.#######.#.###.#######.###.#####.#.###.#####.#####
+#.#...#...#.......#...#.....#.#.#.#...#.#.#.#...#...#.#...#.....#b#.#...#...#..c#
+#.#####.#############.#####.#.#.#.#.#.#.#.#.###.#.#.#.#.###.#####.#.###.#####.#.#
+#p#...V.#..x#.......#...#...#.....#.#...#.#...#.#.#...#...#.#.#...#...#.....#.#.#
+###.#####.#.#.#####.###.#.###U#####.###.#.#.#.#.#.#######.#.#.#.###.#.#####.#.#.#
+#...#.....#.....#...#...#.#.#.#.....#.#.#...#.#.#.#...#.#.#...#...#.#.....#...#.#
+#.###.###########.###.###.#.#.#.#####.#.#.#####.#.#.#.#.#.###.###.#.#####.#####.#
+#.......#.......#...#.#.#.#...#...#.....#.#...#.#.#.#.#...#...#.#.#.....#...#.#.#
+#.#####.#.#####.###.#.#.#.#.#####.#######.#.#.#.#.#H#.###.#.###.#.#.###.###.#.#.#
+#.#...#.#.#...#.....#.#...#.....#...#...#.#.#...#.#.#...#.#.....#.#...#.#.#...#.#
+#.#.#.###.#.#######.#.###.#########.#.#.###.#####.#.###.###.#####.#####.#.###.#.#
+#.#.#.....#...#.....#...#.#.......#...#.#...#.....#.#.#.....#...#.......#.....#.#
+#.#.#########.#.#######.#.#.#####.#####.#.###.#.###.#.#######.#.#########.#####.#
+#.#.........#.#.#.#.....#...#...#.....#.#...#.#.#.........#...#...#.....#...#...#
+#.#########.#.#.#.#.#########.#.#####.#.#.#.#.###.#########.###.###.#.#####.#.#.#
+#.#.......#.#.#...#.#.......#.#.....#.#.#.#.#.....#.#.........#.#...#.#.....#.#.#
+#.#######.#.#.###.#.###.#####.#####.#.#.#.#.###.###.#.#########.#.###.#.#####.#.#
+#......z..#.#.#...#...#.....#.#.....#.#.#.#...#.....#.......#.#.#.#.#...#...#.#.#
+#########.#.#.#.#######.###.#.#.###.#.#.#.###.###########.###.#.#.#.#######.#.#.#
+#.#.......#.#...#.....#.#.#.#.#.#...#.#.#.#.#.............#...#.#.......#...#.#.#
+#.#.#######.#.###.#.#.#.#.#.#.#.#.###.#.#.#.###############.###.#######.#.###.#.#
+#...#.......#...#.#.#.#...#...#.#...#.#.#....j#...#...#....d#...#...#...#...#.#.#
+#.###.#########.###.#.###.#####.#####.#.#####.#.###.#.#.#######.#.#.#.#####.#.#.#
+#...#.#.......#.#...#...#...#.#.....#...#...#.#.....#.#.Z.#.....#.#...#.....#.#.#
+#D###.#####.###.#.#####.###.#.#####.###.###.#.#######.###.###.###.#######.###.#.#
+#.#...#...#..n#...#.N.#.#...#.....#.....#...#.....#...#.#...#.....#.....#.#...#.#
+###.###.#.###.#######.#.#.#####.#.#######.#######.#.#.#.###.#.#####.###.#.#.###W#
+#...#...#.............#.#.....#.#.....M.#.#.......#.#...#...#.......#.....#...#.#
+#.###.#.###############.#####.###.#####.#.#.#######.###.#.#######.#####.#####.#.#
+#.#.P.#...#...#.......#.#...#.....#...#.#.#...#.....#...#...#.#...#...#.#.....#i#
+#.#######.#.#.#.#####.#.#.#.#######.#.#.#.###.###.###.#####.#.#.###.#.###.#####.#
+#.......#...#.......#...#.#.......#.#...#...#....f#.E.#...#.#.....#.#.#...#.O.#.#
+#.#####.#################.###.#####.#####.#########.#####.#.#######X#.#.###.#.###
+#.#.#...#...#...T...#.A.#...#..k..#.#...#.#...#...#.#...#.#.....#...#.#.....#...#
+#.#.#.###.#.#.#####.#.#.###.#####.#.#.#.#.#.#.#.#.#.#.#.#.#####.#.###.#########.#
+#...#.....#.......#...#.........#.Y...#.#..s#...#..g..#.......#v..#............l#
+#################################################################################")
