@@ -197,6 +197,7 @@
   (-> maze
       (merge {:steps          0                             ; Counts steps as we explore the maze.
               :pos            (first (keys (:player maze))) ; Tracks the location we have reached.
+              :multi-pos (vec (keys (:player maze)))        ; Used in part 2 where we start multiple places.
               :keys-found     []                            ; Keys we have passed during this traversal, in order.
               :doors-blocking #{}                           ; Doors we need other keys for before this path works.
               :key-index      (clojure.set/map-invert (:keys maze))  ; Make it easy to search from them.
@@ -206,16 +207,27 @@
 (defn search-from
   "Sets up a search from the specified key location. Resets the steps
   visited, keys-found and doors-blocking accumulators since this is a
-  new search. `player-started` holds the coordinates at which the
-  player started in this maze so that `@` can be translated
-  appropriately."
-  [player-started start state]
-  (let [starting-pos (if (= "@" start) player-started (get-in state [:key-index start]))]
+  new search."
+  [start state]
+  (let [starting-pos (cond
+                       (= "@" start)  ; Simple one-start-point case.
+                       (first (keys (:player state)))
+
+                       (#{"1" "2" "3" "4"} start)  ; One of the multi-start points.
+                       (get-in state [:multi-pos (dec (Long/valueOf start))])
+
+                       :else  ; A key.
+                       (get-in state [:key-index start]))]
     (merge state {:pos            starting-pos ; Start from the specified key location.
                   :steps          0            ; This is a new search, start over at zero.
                   :visited        #{}          ; And we haven't walked anywhere yet this time.
                   :keys-found     []           ; Keys that we have passed during this traversal.
                   :doors-blocking #{}})))      ; Doors we need other keys for before this path works.
+
+(defn start-point?
+  "Checks if the specified maze point is one of the start points."
+  [point]
+  (#{"@" "1" "2" "3" "4"} point))
 
 (defn other-key
   "Given a key pair set and one of the keys it contains, returns the
@@ -229,32 +241,31 @@
   picked up along the way, and any doors that must be unlocked before
   the path can be followed. If there is more than one route with the
   same minimum steps, reports all the distinct sets of keys/doors
-  along each of them. `player-started` is the starting coordinates of
-  the player/robot in this maze. `pair` is a set of start location and
-  target key (the order does not matter because the route returns the
-  same values in either direction, but for calling `visit` in the
-  special case where we want to start at the start of the maze, one of
-  the elements will be `@` and that will need to be the first argument
-  to `visit`."
-  [player-started pair state]
-  (let [[start target] (if (pair "@")
-                         ["@" (other-key pair "@")]
+  along each of them. `pair` is a set of start location and target
+  key (the order does not matter because the route returns the same
+  values in either direction, but for calling `visit` in the special
+  case where we want to start at the start of the maze, one of the
+  elements will be `@` and that will need to be the first argument to
+  `visit`."
+  [pair state]
+  (let [[start target] (if-let [player-start (some start-point? pair)]
+                         [player-start (first (drop-while start-point? pair))]
                          (vec pair))]
-    (visit start target (search-from player-started start state))))
+    (visit start target (search-from start state))))
 
 (defn find-key-routes
-  "Accumulates all the best paths from the start (the coordinate
-  provided in `player-started`) to each key, and from each key to each
-  other key, with notes about the doors blocking each, and extra keys
-  found along the way."
-  [player-started maze]
+  "Accumulates all the best paths from the start (the marker provided in
+  `player-started`) to each key, and from each key to each other key,
+  with notes about the doors blocking each, and extra keys found along
+  the way."
+  [maze player-started]
   (reduce (fn [state pair]
-            (let [with-new-route (find-route player-started pair state)]
+            (let [with-new-route (find-route pair state)]
               (if (< (:steps with-new-route) Long/MAX_VALUE)  ; Only include working routes.
                 with-new-route
                 state)))
           maze
-          (map set (combo/combinations (conj (keys (:key-index maze)) "@") 2))))
+          (map set (combo/combinations (conj (keys (:key-index maze)) player-started) 2))))
 
 (defn can-reach-key
   "Given a set of key route path annotations (which include the doors
@@ -290,9 +301,8 @@
   and between keys."
   [maze]
   (println "Finding routes between keys...")
-  (let [player-started (first (keys (:player maze)))
-        maze           (find-key-routes player-started (initial-state-for-map maze))
-        best-so-far    (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
+  (let [maze        (find-key-routes (initial-state-for-map maze) "@")
+        best-so-far (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
     (println (count (:routes maze)) "routes found. Solving for best collection order...")
     (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) "@" []])]
       (when-let [current (first work-queue)]
@@ -412,20 +422,66 @@
 
 ;; Part 2
 
-(defn initial-state-for-map-2
-  "Converts a maze map into the initial state needed by the multi-robot solver.
-  Sets up the visited set, turns the walls entry into a simple set of
-  coordinates, and builds an index from key name to its coordinate to
-  make it easy to build the route map. Pos will be set to the starting
-  point of each robot when finding paths from start to keys."
+(defn find-multiplayer-key-routes
+  "Finds routes to keys from multiple start locations and between all
+  keys."
   [maze]
-  (-> maze
-      (merge {:steps          0                             ; Counts steps as we explore the maze.
-              :keys-found     []                            ; Keys we have passed during this traversal, in order.
-              :doors-blocking #{}                           ; Doors we need other keys for before this path works.
-              :key-index      (clojure.set/map-invert (:keys maze))  ; Make it easy to search from them.
-              :visited        #{}})  ; Keep track of places we have been.
-      (update :walls (fn [m] (set (keys m))))))
+  (reduce find-key-routes maze ["1" "2" "3" "4"]))
+
+(defn accessible-keys-2
+  "Returns all the keys we can get to from our current position without
+  opening any new doors, in the multi-robot case. Returns tuples
+  containing the key that can be reached, the index of the robot that
+  can reach it, and the route (steps required, additional keys
+  encountered, and doors in the way, for which we must already have
+  keys)."
+  [state keys-left-set pos]
+  (filter (fn [[k]]  ; Ignore "routes" back to a starting point.
+            (not (start-point? k)))
+          (map (fn [[[pair route] robot]]
+                 [(other-key pair (nth pos robot)) robot route])
+               (filter (fn [[[pair [_ path-set]] robot]]
+                         (let [starting-key (nth pos robot)]
+                           (and (pair starting-key)
+                                (keys-left-set (other-key pair starting-key))
+                                (can-reach-key path-set keys-left-set))))
+                       (for [route-entry (:routes state)
+                             robot (range 4)]
+                         [route-entry robot])))))
+
+(defn solve-2
+  "Solver variation that works from four different start positions
+  simultaneously."
+  [maze]
+  (println "Finding multi-robot routes between keys...")
+  (let [maze        (find-multiplayer-key-routes (initial-state-for-map maze))
+        best-so-far (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
+    (println (count (:routes maze)) "routes found. Solving for best multi-robot collection order...")
+    (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) ["1" "2" "3" "4"] []])]
+      (when-let [current (first work-queue)]
+        (let [[steps keys-left pos found-order] current]
+          (println steps (count work-queue) keys-left)
+          (if (empty? keys-left) ; We found the best answer! Return it.
+            [steps found-order]
+            (if (> steps max-steps)
+              (println "Abandoning search at" steps "steps.")
+              (if (>= steps (get @best-so-far [pos keys-left] Long/MAX_VALUE))
+                (do
+                  (println "Already have equal or better route to this state, abandoning this branch.")
+                  (recur (disj work-queue current)))
+                (let [keys-left-set (set keys-left)
+                      new-options   (map (fn [[k robot [new-steps {:keys [keys-found]}]]]
+                                           [(+ steps new-steps)
+                                            (vec (sort (clojure.set/difference keys-left-set
+                                                                               (set (conj keys-found k)))))
+                                            (assoc pos robot k)
+                                            (vec (concat found-order keys-found k))])
+                                         (accessible-keys-2 maze keys-left-set pos))]
+                  (swap! best-so-far assoc [pos keys-left] steps)  ; Record best route to this state so far.
+                  (doseq [option new-options]
+                    (println option))
+                  (println)
+                  (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options))))))))))))
 
 (def part-2-maze
   "The maze for part 2 of the problem."
@@ -510,3 +566,8 @@
 #.#.#.###.#.#.#####.#.#.###.#####.#.#.#.#.#.#.#.#.#.#.#.#.#####.#.###.#########.#
 #...#.....#.......#...#.........#.Y...#.#..s#...#..g..#.......#v..#............l#
 #################################################################################")
+
+(defn part-2
+  "Solve part 2."
+  []
+  (solve-2 (read-maze part-2-maze)))

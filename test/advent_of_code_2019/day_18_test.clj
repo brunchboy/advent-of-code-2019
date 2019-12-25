@@ -44,10 +44,11 @@
                :doors          {[3 1] "a"},
                :steps          0,
                :pos            [5 1],
+               :multi-pos      [[5 1]],
                :keys-found     [],
                :doors-blocking #{},
                :visited        #{}
-               :player        {[5 1] :player}}
+               :player         {[5 1] :player}}
               (sut/initial-state-for-map (sut/read-maze sample-maze-1)))))
 
 (test/deftest add-route
@@ -60,6 +61,7 @@
                  :steps          50,
                  :doors-blocking #{"d" "f"},
                  :pos            [5 1],
+                 :multi-pos            [[5 1]],
                  :visited        #{},
                  :walls
                  #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
@@ -77,6 +79,7 @@
                  :steps          2,
                  :doors-blocking #{},
                  :pos            [6 1],
+                 :multi-pos      [[5 1]],
                  :visited        #{[5 1] [6 1]},
                  :walls
                  #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
@@ -85,12 +88,13 @@
                  :key-index      {"b" [1 1], "a" [7 1]}
                  :keys-found     []
                  :player         {[5 1] :player}}
-                (sut/find-route [5 1] #{"@" "a"} state)))
+                (sut/find-route #{"@" "a"} state)))
     (test/is (= {:routes         {#{"a" "b"} [6 #{{:keys-found [], :doors-blocking #{"a"}}}]}
                  :doors          {[3 1] "a"},
                  :steps          6,
                  :doors-blocking #{"a"},
                  :pos            [2 1],
+                 :multi-pos      [[5 1]],
                  :visited        #{[7 1] [4 1] [5 1] [6 1] [3 1] [2 1]},
                  :walls
                  #{[2 2] [0 0] [1 0] [7 2] [4 2] [3 0] [8 0] [5 2] [8 2] [8 1] [7 0]
@@ -99,15 +103,15 @@
                  :keys           {[1 1] "b", [7 1] "a"},
                  :keys-found     []
                  :player         {[5 1] :player}}
-                (sut/find-route [5 1] #{"a" "b"} state)))
+                (sut/find-route #{"a" "b"} state)))
     (test/is (= {#{"b" "@"} [4 #{{:keys-found [], :doors-blocking #{"a"}}}],
                  #{"a" "@"} [2 #{{:keys-found [], :doors-blocking #{}}}],
                  #{"a" "b"} [6 #{{:keys-found [], :doors-blocking #{"a"}}}]}
-                (:routes (sut/find-key-routes [5 1] state))))))
+                (:routes (sut/find-key-routes state "@"))))))
 
 (test/deftest accessible-keys-1
   (let [maze      (sut/initial-state-for-map (sut/read-maze sample-maze-1))
-        state     (sut/find-key-routes (first (keys (:player maze))) maze)
+        state     (sut/find-key-routes maze "@")
         keys-left (set (keys (:key-index state)))]
     (test/is (= [["a" [2 #{{:keys-found [], :doors-blocking #{}}}]]]
                 (sut/accessible-keys state keys-left "@")))))
@@ -124,15 +128,15 @@
 ")
 
 (test/deftest find-routes-2
-  (let [state        (sut/initial-state-for-map (sut/read-maze sample-maze-2))
-        player-start (first (keys (:player state)))
-        state-2      (sut/find-route player-start #{"@" "a"} state)
-        state-3      (sut/find-route player-start #{"a" "c"} state-2)]
+  (let [state   (sut/initial-state-for-map (sut/read-maze sample-maze-2))
+        state-2 (sut/find-route #{"@" "a"} state)
+        state-3 (sut/find-route #{"a" "c"} state-2)]
     (test/is (= {:routes         {#{"@" "a"} [2 #{{:keys-found [], :doors-blocking #{}}}]}
                  :doors          {[3 1] "d", [5 1] "e", [9 1] "c", [13 1] "a", [19 1] "b"},
                  :steps          2,
                  :doors-blocking #{},
                  :pos            [16 1],
+                 :multi-pos      [[15 1]],
                  :visited        #{[15 1] [16 1]},
                  :walls
                  #{[15 4] [11 2] [2 2] [0 0] [23 2] [23 0] [17 2] [1 0] [8 4] [7 2]
@@ -157,6 +161,7 @@
                  :steps          4,
                  :doors-blocking #{"b"},
                  :pos            [20 1],
+                 :multi-pos      [[15 1]],
                  :visited        #{[17 1] [19 1] [18 1] [20 1]},
                  :walls
                  #{[15 4] [11 2] [2 2] [0 0] [23 2] [23 0] [17 2] [1 0] [8 4] [7 2]
@@ -180,7 +185,7 @@
                  [44
                   #{{:keys-found     ["c" "a" "b" "e"],
                      :doors-blocking #{"d" "e" "a" "b" "c"}}}]}
-                (:routes (sut/find-route player-start #{"d" "f"} state-3))))
+                (:routes (sut/find-route #{"d" "f"} state-3))))
     (test/is (= {#{"d" "c"} [24 #{{:keys-found [], :doors-blocking #{}}}],
                  #{"f" "@"}
                  [14 #{{:keys-found ["b" "e"], :doors-blocking #{"d" "e" "a" "c"}}}],
@@ -216,12 +221,11 @@
                  #{"b" "c"} [10 #{{:keys-found ["a"], :doors-blocking #{"a" "b"}}}],
                  #{"a" "c"} [4 #{{:keys-found [], :doors-blocking #{"b"}}}],
                  #{"f" "e"} [6 #{{:keys-found [], :doors-blocking #{"d" "e"}}}]}
-                (:routes (sut/find-key-routes player-start state))))))
+                (:routes (sut/find-key-routes state "@"))))))
 
 (test/deftest available-keys-2
   (let [maze         (sut/initial-state-for-map (sut/read-maze sample-maze-2))
-        player-start (first (keys (:player maze)))
-        state        (sut/find-key-routes player-start maze)
+        state        (sut/find-key-routes maze "@")
         keys-left    (set (keys (:key-index state)))]
     (test/is (= [["a" [2 #{{:keys-found [], :doors-blocking #{}}}]]]
                 (sut/accessible-keys state keys-left "@")))
@@ -268,3 +272,90 @@
 
 (test/deftest solve-maze-5
   (test/is (= [81 [\a \c \d \g \f \i \b \e \h]] (sut/solve (sut/read-maze sample-maze-5)))))
+
+;; Part 2.
+
+(def sample-maze-2-1
+  "The first sample maze for part 2."
+  "###############
+#d.ABC.#.....a#
+######@#@######
+###############
+######@#@######
+#b.....#.....c#
+###############")
+
+(test/deftest read-sample-maze-2-1
+  "Makes sure we properly read multiple player start locations, and
+  can build key paths from each."
+  (let [maze (sut/initial-state-for-map (sut/read-maze sample-maze-2-1))]
+    (test/is (= {[6 2] :player, [8 2] :player, [6 4] :player, [8 4] :player}
+                (:player maze)))
+    (test/is (= {:routes
+                 {#{"d" "1"} [6 #{{:keys-found [], :doors-blocking #{"a" "b" "c"}}}],
+                  #{"a" "2"} [6 #{{:keys-found [], :doors-blocking #{}}}],
+                  #{"3" "b"} [6 #{{:keys-found [], :doors-blocking #{}}}],
+                  #{"4" "c"} [6 #{{:keys-found [], :doors-blocking #{}}}]},
+                 :multi-pos      [[6 2] [8 2] [6 4] [8 4]],
+                 :doors          {[3 1] "a", [4 1] "b", [5 1] "c"},
+                 :steps          6,
+                 :doors-blocking #{},
+                 :pos            [12 5],
+                 :visited        #{[10 5] [8 4] [12 5] [8 5] [11 5] [9 5]},
+                 :walls
+                 #{[7 6] [7 1] [12 6] [13 3] [11 2] [4 3] [2 2] [0 0] [13 6] [1 0]
+                   [2 3] [7 2] [7 4] [8 3] [0 6] [3 3] [5 4] [6 3] [0 5] [14 6] [3 4]
+                   [11 0] [7 3] [8 6] [12 2] [4 2] [13 2] [3 0] [9 0] [6 6] [9 6] [5 3]
+                   [9 3] [13 0] [8 0] [5 2] [4 6] [11 4] [1 4] [10 2] [12 0] [10 0]
+                   [1 3] [11 6] [14 4] [11 3] [12 4] [0 3] [5 6] [14 1] [2 4] [3 6]
+                   [14 5] [10 6] [9 2] [10 4] [7 0] [0 2] [2 0] [0 4] [12 3] [9 4]
+                   [14 2] [1 6] [14 3] [4 4] [7 5] [2 6] [5 0] [13 4] [6 0] [1 2]
+                   [10 3] [3 2] [14 0] [0 1] [4 0]},
+                 :key-index      {"d" [1 1], "a" [13 1], "b" [1 5], "c" [13 5]},
+                 :keys           {[1 1] "d", [13 1] "a", [1 5] "b", [13 5] "c"},
+                 :player         {[6 2] :player, [8 2] :player, [6 4] :player, [8 4] :player},
+                 :keys-found     []}
+                (sut/find-multiplayer-key-routes maze)))))
+
+(test/deftest accessible-keys-2-1
+  (let [maze      (sut/initial-state-for-map (sut/read-maze sample-maze-2-1))
+        state     (sut/find-multiplayer-key-routes maze)
+        keys-left (set (keys (:key-index state)))]
+    (test/is (= [["a" 1 [6 #{{:keys-found [], :doors-blocking #{}}}]]
+                 ["b" 2 [6 #{{:keys-found [], :doors-blocking #{}}}]]
+                 ["c" 3 [6 #{{:keys-found [], :doors-blocking #{}}}]]]
+                (sut/accessible-keys-2 state keys-left ["1" "2" "3" "4"])))))
+
+(test/deftest solve-maze-2-1
+  (test/is (= [24 [\a \b \c \d]] (sut/solve-2 (sut/read-maze sample-maze-2-1)))))
+
+(def sample-maze-2-2
+  "The second sample maze for part 2."
+  "#############
+#DcBa.#.GhKl#
+#.###@#@#I###
+#e#d#####j#k#
+###C#@#@###J#
+#fEbA.#.FgHi#
+#############")
+
+(test/deftest solve-maze-2-2
+  (test/is (= [32 [\a \b \c \d \e \f \g \h \i \j \k \l]]
+              (sut/solve-2 (sut/read-maze sample-maze-2-2)))))
+
+(def sample-maze-2-3
+  "The third sample maze for part 2."
+  "#############
+#g#f.D#..h#l#
+#F###e#E###.#
+#dCba@#@BcIJ#
+#############
+#nK.L@#@G...#
+#M###N#H###.#
+#o#m..#i#jk.#
+#############
+")
+
+(test/deftest solve-maze-2-2
+  (test/is (= [72 [\e \a \b \h \c \d \f \g \i \k \j \l \n \m \o]]
+              (sut/solve-2 (sut/read-maze sample-maze-2-3)))))
