@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-12
   "Solutions to the Day 12 problems."
-  (:require [clojure.repl :refer :all]))
+  (:require [clojure.set]
+            [clojure.repl :refer :all]))
 
 (def initial-state
   "The starting positions of the moons. In problem statement:

@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-20
   "Solutions to the Day 20 problems."
-  (:require [clojure.repl :refer :all]))
+  (:require [clojure.set]
+            [clojure.repl :refer :all]))
 
 (defn position-after-move
   "Updates coordinates based on the direction moved."

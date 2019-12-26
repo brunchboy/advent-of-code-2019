@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-18
   "Solutions to the Day 18 problems."
-  (:require [clojure.math.combinatorics :as combo]
+  (:require [clojure.set]
+            [clojure.math.combinatorics :as combo]
             [clojure.repl :refer :all]))
 
 (defn describe-maze-cell

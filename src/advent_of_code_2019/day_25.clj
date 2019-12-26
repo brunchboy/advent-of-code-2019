@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-25
   "Solutions to the Day 25 problems."
-  (:require [clojure.repl :refer :all]
+  (:require [clojure.set]
+            [clojure.repl :refer :all]
             [clojure.core.async :as a :refer [>! <! >!! <!!]]
             [clojure.math.combinatorics :as combo]
             [advent-of-code-2019.day-9 :refer [intcode-async assoc-growing]])
