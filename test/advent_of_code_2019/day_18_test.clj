@@ -273,6 +273,11 @@
 (test/deftest solve-maze-5
   (test/is (= [81 [\a \c \d \g \f \i \b \e \h]] (sut/solve (sut/read-maze sample-maze-5)))))
 
+(test/deftest part-1
+  "Test solution for part 1."
+  (test/is [= [4250 [\b \c \j \e \y \f \g \s \m \t \k \a \o \w \q \h \x \z \d \v \l \i \r \u \p \n]]
+            (sut/part-1)]))
+
 ;; Part 2.
 
 (def sample-maze-2-1
@@ -359,3 +364,8 @@
 (test/deftest solve-maze-2-2
   (test/is (= [72 [\e \a \b \h \c \d \f \g \i \k \j \l \n \m \o]]
               (sut/solve-2 (sut/read-maze sample-maze-2-3)))))
+
+(test/deftest part-2
+  "Test solution for part 2."
+  (test/is [= [1640 [\r \u \j \f \h \e \g \s \b \c \m \t \y \k \a \q \w \i \o \l \x \v \p \z \d \n]]
+            (sut/part-2)]))

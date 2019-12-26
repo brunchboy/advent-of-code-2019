@@ -300,22 +300,28 @@
   "Iterative breadth-first maze solver working at the level of routes to
   and between keys."
   [maze]
-  (println "Finding routes between keys...")
-  (let [maze        (find-key-routes (initial-state-for-map maze) "@")
-        best-so-far (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
+  (println "Finding routes to and between keys...")
+  (let [maze (find-key-routes (initial-state-for-map maze) "@")]
     (println (count (:routes maze)) "routes found. Solving for best collection order...")
-    (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) "@" []])]
+    ;; Our `work-queue` tells us which key to try next. It is a sorted
+    ;; set of tuples whose values are: the number of steps taken so
+    ;; far, the list of keys that are still unobtained, and our
+    ;; current position (`@` at start, or the last key retrieved).
+    ;; `best-so-far` plays the role that `visited` did in the
+    ;; step-level maze solver, allowing us to avoid getting caught in
+    ;; loops. It is a map from [position keys-unobtained] to the
+    ;; lowest number of steps in which we have achieved that state.
+    (loop [work-queue  (sorted-set [0 (vec (sort (keys (:key-index maze)))) "@" []])
+           best-so-far {}]
       (when-let [current (first work-queue)]
         (let [[steps keys-left pos found-order] current]
-          (println steps (count work-queue) keys-left)
+          #_(println steps (count work-queue) keys-left)
           (if (empty? keys-left) ; We found the best answer! Return it.
             [steps found-order]
             (if (> steps max-steps)
               (println "Abandoning search at" steps "steps.")
-              (if (>= steps (get @best-so-far [pos keys-left] Long/MAX_VALUE))
-                (do
-                  (println "Already have equal or better route to this state, abandoning this branch.")
-                  (recur (disj work-queue current)))
+              (if (>= steps (get best-so-far [pos keys-left] Long/MAX_VALUE))
+                (recur (disj work-queue current) best-so-far)
                 (let [keys-left-set (set keys-left)
                       new-options   (map (fn [[k [new-steps {:keys [keys-found]}]]]
                                            [(+ steps new-steps)
@@ -324,12 +330,8 @@
                                             k
                                             (vec (concat found-order keys-found k))])
                                          (accessible-keys maze keys-left-set pos))]
-                  (swap! best-so-far assoc [pos keys-left] steps)  ; Record best route to this state so far.
-                  (doseq [option new-options]
-                    (println option))
-                  (println)
-                  #_(println new-options)
-                  (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options))))))))))))
+                  (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options))
+                         (assoc best-so-far [pos keys-left] steps)))))))))))
 
 (def part-1-maze
   "The maze for part 1 of the problem."
@@ -453,22 +455,31 @@
   "Solver variation that works from four different start positions
   simultaneously."
   [maze]
-  (println "Finding multi-robot routes between keys...")
-  (let [maze        (find-multiplayer-key-routes (initial-state-for-map maze))
-        best-so-far (atom {})] ; Map of [key-reached keys-remaining] to least steps taken.
+  (println "Finding multi-robot routes to and between keys...")
+  (let [maze        (find-multiplayer-key-routes (initial-state-for-map maze))]
     (println (count (:routes maze)) "routes found. Solving for best multi-robot collection order...")
-    (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) ["1" "2" "3" "4"] []])]
+    ;; Our `work-queue` tells us which robot to send to which key
+    ;; next. It is a sorted set of tuples whose values are: the number
+    ;; of steps taken so far, the list of keys that are still
+    ;; unobtained, and the current position tags of each robot. The
+    ;; four start positions are labeled 1 through 4, and otherwise the
+    ;; robots will be at the location of the last key they retrieved.
+    ;; `best-so-far` plays the role that `visited` did in the
+    ;; step-level maze solver, allowing us to avoid getting caught in
+    ;; loops. It is a map from [robot-positions keys-unobtained] to
+    ;; the lowest number of steps in which we have achieved that
+    ;; state.
+    (loop [work-queue (sorted-set [0 (vec (sort (keys (:key-index maze)))) ["1" "2" "3" "4"] []])
+           best-so-far {}] ; Map of [robot-positions keys-remaining] to least steps taken.
       (when-let [current (first work-queue)]
         (let [[steps keys-left pos found-order] current]
-          (println steps (count work-queue) keys-left)
+          #_(println steps (count work-queue) keys-left)
           (if (empty? keys-left) ; We found the best answer! Return it.
             [steps found-order]
             (if (> steps max-steps)
               (println "Abandoning search at" steps "steps.")
-              (if (>= steps (get @best-so-far [pos keys-left] Long/MAX_VALUE))
-                (do
-                  (println "Already have equal or better route to this state, abandoning this branch.")
-                  (recur (disj work-queue current)))
+              (if (>= steps (get best-so-far [pos keys-left] Long/MAX_VALUE))
+                (recur (disj work-queue current) best-so-far)
                 (let [keys-left-set (set keys-left)
                       new-options   (map (fn [[k robot [new-steps {:keys [keys-found]}]]]
                                            [(+ steps new-steps)
@@ -477,11 +488,8 @@
                                             (assoc pos robot k)
                                             (vec (concat found-order keys-found k))])
                                          (accessible-keys-2 maze keys-left-set pos))]
-                  (swap! best-so-far assoc [pos keys-left] steps)  ; Record best route to this state so far.
-                  (doseq [option new-options]
-                    (println option))
-                  (println)
-                  (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options))))))))))))
+                  (recur (clojure.set/union (disj work-queue current) (apply sorted-set new-options))
+                         (assoc best-so-far [pos keys-left] steps)))))))))))
 
 (def part-2-maze
   "The maze for part 2 of the problem."
