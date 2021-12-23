@@ -1,6 +1,7 @@
 (ns advent-of-code-2019.day-3
   "Solutions to the Day 3 problems"
-  (:require [clojure.repl :refer :all]))
+  (:require [clojure.repl :refer :all]
+            [clojure.string :as str]))
 
 (defn extract-segment
   "Pulls off and decomposes the first wire routing."
@@ -24,7 +25,7 @@
          y          0
          horizontal []
          vertical   []
-         specs      (clojure.string/split routing #",")]
+         specs      (str/split routing #",")]
     (if (seq specs)
       (let [[direction distance remaining] (extract-segment specs)]
         (case direction
